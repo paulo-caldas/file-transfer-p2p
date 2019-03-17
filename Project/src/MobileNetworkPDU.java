@@ -1,7 +1,7 @@
 public class MobileNetworkPDU {
 
-    private byte[] srcMAC;
-    private byte[] dstMAC;
+    private String srcMAC;
+    private String dstMAC;
     private String contentID;
     private String sessionID;
     private MobileNetworkErrorType errorCode;
