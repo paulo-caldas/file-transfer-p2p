@@ -1,3 +1,6 @@
 .idea/*
-Project/out/*
 Project/.idea/*
+Project/out/production/*
+Project/src/META-INF/*
+Project/src.iml
+Project/pom.xml
