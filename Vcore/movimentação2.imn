@@ -1,0 +1,249 @@
+node n1 {
+    type router
+    model mdr
+    network-config {
+	hostname n1
+	!
+	interface eth0
+	 ip address 10.0.0.1/32
+	 ipv6 address 2001:0::1/128
+	!
+    }
+    canvas c1
+    iconcoords {165.0 24.0}
+    labelcoords {165.0 56.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n2 {
+    type router
+    model mdr
+    network-config {
+	hostname n2
+	!
+	interface eth0
+	 ip address 10.0.0.2/32
+	 ipv6 address 2001:0::2/128
+	!
+    }
+    canvas c1
+    iconcoords {114.0 210.0}
+    labelcoords {114.0 242.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n3 {
+    type router
+    model mdr
+    network-config {
+	hostname n3
+	!
+	interface eth0
+	 ip address 10.0.0.3/32
+	 ipv6 address 2001:0::3/128
+	!
+    }
+    canvas c1
+    iconcoords {66.0 193.0}
+    labelcoords {66.0 225.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n4 {
+    type router
+    model mdr
+    network-config {
+	hostname n4
+	!
+	interface eth0
+	 ip address 10.0.0.4/32
+	 ipv6 address 2001:0::4/128
+	!
+    }
+    canvas c1
+    iconcoords {93.0 84.0}
+    labelcoords {93.0 116.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n5 {
+    type router
+    model mdr
+    network-config {
+	hostname n5
+	!
+	interface eth0
+	 ip address 10.0.0.5/32
+	 ipv6 address 2001:0::5/128
+	!
+    }
+    canvas c1
+    iconcoords {178.0 172.0}
+    labelcoords {178.0 204.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n6 {
+    type router
+    model mdr
+    network-config {
+	hostname n6
+	!
+	interface eth0
+	 ip address 10.0.0.6/32
+	 ipv6 address 2001:0::6/128
+	!
+    }
+    canvas c1
+    iconcoords {153.0 208.0}
+    labelcoords {153.0 240.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n7 {
+    type router
+    model mdr
+    network-config {
+	hostname n7
+	!
+	interface eth0
+	 ip address 10.0.0.7/32
+	 ipv6 address 2001:0::7/128
+	!
+    }
+    canvas c1
+    iconcoords {45.0 49.0}
+    labelcoords {45.0 81.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n8 {
+    type router
+    model mdr
+    network-config {
+	hostname n8
+	!
+	interface eth0
+	 ip address 10.0.0.8/32
+	 ipv6 address 2001:0::8/128
+	!
+    }
+    canvas c1
+    iconcoords {628.0 243.0}
+    labelcoords {628.0 275.0}
+    interface-peer {eth0 n9}
+    services {zebra OSPFv3MDR vtysh IPForward}
+}
+
+node n9 {
+    type wlan
+    network-config {
+	hostname wlan9
+	!
+	interface wireless
+	 ip address 10.0.0.0/32
+	 ipv6 address 2001:0::0/128
+	!
+	mobmodel
+	coreapi
+	basic_range
+	ns2script
+	!
+    }
+    custom-config {
+	custom-config-id basic_range
+	custom-command {3 3 9 9 9}
+	config {
+	range=275
+	bandwidth=54000000
+	jitter=0
+	delay=20000
+	error=0
+	}
+    }
+    custom-config {
+	custom-config-id ns2script
+	custom-command {10 3 11 10 10 10 10 10}
+	config {
+	file=/home/core/Downloads/bonnmotion-3.0.1/bin/scenario3.ns_movements
+	refresh_ms=50
+	loop=1
+	autostart=
+	map=
+	script_start=
+	script_pause=
+	script_stop=
+	}
+    }
+    canvas c1
+    iconcoords {88.0 382.0}
+    labelcoords {88.0 414.0}
+    interface-peer {e0 n1}
+    interface-peer {e1 n2}
+    interface-peer {e2 n3}
+    interface-peer {e3 n4}
+    interface-peer {e4 n5}
+    interface-peer {e5 n6}
+    interface-peer {e6 n7}
+    interface-peer {e7 n8}
+}
+
+link l1 {
+    nodes {n9 n1}
+}
+
+link l2 {
+    nodes {n9 n2}
+}
+
+link l3 {
+    nodes {n9 n3}
+}
+
+link l4 {
+    nodes {n9 n4}
+}
+
+link l5 {
+    nodes {n9 n5}
+}
+
+link l6 {
+    nodes {n9 n6}
+}
+
+link l7 {
+    nodes {n9 n7}
+}
+
+link l8 {
+    nodes {n9 n8}
+}
+
+canvas c1 {
+    name {Canvas1}
+}
+
+option global {
+    interface_names no
+    ip_addresses yes
+    ipv6_addresses yes
+    node_labels yes
+    link_labels yes
+    show_api no
+    background_images no
+    annotations yes
+    grid yes
+    traffic_start 0
+}
+
+option session {
+}
+
