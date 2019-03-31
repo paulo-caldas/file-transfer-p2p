@@ -1,8 +1,13 @@
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.net.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import Enum.*;
+import PDU.MobileNetworkPDU;
 
 /*
  *
@@ -13,27 +18,45 @@ import java.util.Map;
  */
 
 public class MobileNode {
-    DatagramSocket serverSocket;
+    MulticastSocket receiveServerSocket;
+    MulticastSocket sendServerSocket;
+
     DatagramPacket receivePacket;
     DatagramPacket sendPacket;
+
+    ByteArrayOutputStream outputStream;
+    ObjectOutputStream os;
+
     byte[] buffer;
     private String macAddr;
     private Map<String,List<String>> contentTable; // Maps content IDs to the nodes that provide them
 
     public MobileNode() {
         try {
-            this.macAddr = macByteArrToString(NetworkInterface.getNetworkInterfaces().nextElement().getHardwareAddress());
-            this.serverSocket = new DatagramSocket(Integer.parseInt(AddressType.LISTENING_PORT.toString()));
-            buffer = new byte[1024];
-            this.contentTable = new HashMap<>();
-        } catch (SocketException e) {
+            NetworkInterface eth0 = NetworkInterface.getByName("eth0");
+            InetAddress group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
+            Integer port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
+
+            macAddr = macByteArrToString(eth0.getHardwareAddress());
+
+            receiveServerSocket = new MulticastSocket(port);
+            receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
+
+            sendServerSocket = new MulticastSocket(port);
+
+            outputStream = new ByteArrayOutputStream();
+            os = new ObjectOutputStream(outputStream);
+
+            buffer = outputStream.toByteArray();
+
+            receivePacket = new DatagramPacket(new byte[1024], 1024);
+
+            sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
+
+            contentTable = new HashMap<>();
+        } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    public MobileNode(String macAddr, Map<String,List<String>> contentTable) {
-        this.macAddr = macAddr;
-        this.contentTable = contentTable;
     }
 
     private String macByteArrToString(byte[] mac) {
@@ -47,29 +70,55 @@ public class MobileNode {
     }
 
     public void sendHelloMessage(String dstMac) {
-        try {
-            buffer = new String("hello from " + this.macAddr + " to " + dstMac).getBytes();
-            sendPacket = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(AddressType.NETWORK_BROADCAST.toString()), Integer.parseInt(AddressType.LISTENING_PORT.toString()));
-            serverSocket.send(sendPacket);
-        } catch (IOException e) {
-          }
+        System.out.println("- Sending hello message to " + dstMac);
+        MobileNetworkPDU helloPacket = new MobileNetworkPDU(
+                macAddr,
+                dstMac,
+                MobileNetworkMessageType.HELLO,
+                MobileNetworkErrorType.VALID,
+                62,
+                "0");
+
+        sendPDU(helloPacket);
     }
 
     public void sendPingMessage(String dstMac) {
-        try {
-            buffer = new String("ping from " + this.macAddr + " to " + dstMac).getBytes();
-            sendPacket = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(AddressType.NETWORK_BROADCAST.toString()), Integer.parseInt(AddressType.LISTENING_PORT.toString()));
-            serverSocket.send(sendPacket);
-        } catch (IOException e) {
-        }
+        System.out.println("- Sending hello message to " + dstMac);
+        MobileNetworkPDU pingPacket = new MobileNetworkPDU(
+                macAddr,
+                dstMac,
+                MobileNetworkMessageType.PING,
+                MobileNetworkErrorType.VALID,
+                62,
+                "0");
+
+        sendPDU(pingPacket);
+
     }
 
     public void sendPongMessage(String dstMac) {
+        System.out.println("- Sending pong message " + dstMac);
+        MobileNetworkPDU pongPacket = new MobileNetworkPDU(
+                macAddr,
+                dstMac,
+                MobileNetworkMessageType.PONG,
+                MobileNetworkErrorType.VALID,
+                62,
+                "0");
+
+        sendPDU(pongPacket);
+    }
+
+    public void sendPDU(MobileNetworkPDU pdu) {
         try {
-            buffer = new String("pong from " + this.macAddr + " to " + dstMac).getBytes();
-            sendPacket = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(AddressType.NETWORK_BROADCAST.toString()), Integer.parseInt(AddressType.LISTENING_PORT.toString()));
-            serverSocket.send(sendPacket);
+            os.writeObject(pdu);
+
+            buffer = outputStream.toByteArray();
+            sendPacket.setData(buffer);
+            sendServerSocket.send(sendPacket);
+
         } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -83,12 +132,13 @@ public class MobileNode {
     }
 
     public void listenForPeers() {
+        System.out.println("- Listening...");
         try {
             while(true) {
-                serverSocket.receive(receivePacket);
+                receiveServerSocket.receive(receivePacket);
                 String data = new String(receivePacket.getData());
 
-                System.out.println(data);
+                System.out.println("Got: " + data);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -96,8 +146,9 @@ public class MobileNode {
     }
 
     public void run() {
+        System.out.println("- Starting mobile node");
         sendHelloMessage(AddressType.LINK_MULTICAST.toString());
-        new MobileNodeKeepaliveDaemon(this).run();
+        new Thread(new MobileNodeKeepaliveDaemon(this)).start();
         listenForPeers();
     }
 }
