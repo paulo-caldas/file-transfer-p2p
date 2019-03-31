@@ -1,0 +1,46 @@
+public MobileNetworkPDU {
+
+    srcAddrs,
+    dstAddrs,
+    mssgType,
+    errorCode,
+    TTL,
+    sessionID
+}
+
+
+public HelloMobileNetworkPDU extends MobileNetworkPDU {
+    List<String> contentIDs,
+    List<String> neighborIDs
+}
+
+public ContentMobileNetworkPDU extends MobileNetworkPDU {
+    String contentID;
+    List<String> routerIds;
+    Data data;
+}
+
+
+
+            (x?[A])              (x?[A,B])
+      [A]----------------> [B] --------------> [C]
+      (x) (x,content(x),[]) (x,content(x),[A])
+
+
+
+
+=============== =============== =============== ===============
+
+MobileNetworkPDU pdu = socket.readObject();
+
+int type = pdu.getType();
+
+switch (type) {
+
+    ping ->
+    pong ->
+    hello -> (HelloMobileNetworkPDU) pdu; pdu.providedContentIds(); pdu.getNeightbours();
+    RequestContent -> (ContentMobileNetworkPDU); pdu.getContentID(); pdu.getRouterPath();
+    ReplyContent -> (ContentMobileNetworkPDU); pdu.getContentID(); pdu.getRouterPath();
+
+}
