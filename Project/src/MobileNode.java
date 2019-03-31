@@ -1,6 +1,4 @@
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.*;
 import java.util.HashMap;
 import java.util.List;
@@ -136,11 +134,18 @@ public class MobileNode {
         try {
             while(true) {
                 receiveServerSocket.receive(receivePacket);
-                String data = new String(receivePacket.getData());
+                byte[] data = receivePacket.getData();
 
-                System.out.println("Got: " + data);
+                ByteArrayInputStream in = new ByteArrayInputStream(data);
+                ObjectInputStream objectInputStream = new ObjectInputStream(in);
+
+                MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
+
+                System.out.println("Got: " + pdu.toString());
             }
         } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
