@@ -47,7 +47,7 @@ public class MobileNetworkPDU implements Serializable {
     }
 
     public String toString() {
-        return String.format("(%s,%s,%d,%d,%d,%s)", srcMAC, dstMAC, messageType, errorCode, TTL, sessionID);
+        return String.format("(%s,%s,%s,%s,%d,%s)", srcMAC, dstMAC, messageType, errorCode, TTL, sessionID);
     }
 
 }
