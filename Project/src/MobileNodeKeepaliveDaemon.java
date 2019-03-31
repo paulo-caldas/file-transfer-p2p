@@ -1,3 +1,5 @@
+import Enum.*;
+
 public class MobileNodeKeepaliveDaemon extends Thread{
     private MobileNode representativeNode;
 
@@ -7,6 +9,7 @@ public class MobileNodeKeepaliveDaemon extends Thread{
 
     @Override
     public void run () {
+        System.out.println("- Starting keepalive daemon");
         try {
             while (true) {
                 Thread.sleep(5000);
