@@ -35,7 +35,7 @@ public class MobileNode {
             InetAddress group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             Integer port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
 
-            macAddr = macByteArrToString(eth0.getHardwareAddress());
+            macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
@@ -55,16 +55,6 @@ public class MobileNode {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    private String macByteArrToString(byte[] mac) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < mac.length; i++) {
-            sb.append(String.format("%02X%s", mac[i],
-                    (i < mac.length - 1) ? ":" : ""));
-        }
-
-        return sb.toString();
     }
 
     public void sendHelloMessage(String dstMac) {
@@ -129,12 +119,65 @@ public class MobileNode {
 
     }
 
+
+    public void run() throws InterruptedException {
+        System.out.println("- Starting mobile node");
+
+        // Listens for incoming messages
+        Thread listeningDaemon = new Thread(new MobileNodeListeningDaemon(this));
+
+        // Periodically queries peers if they're alive
+        Thread queryingDaemon = new Thread(new MobileNodeKeepaliveDaemon(this));
+
+        listeningDaemon.start();
+        queryingDaemon.start();
+
+        listeningDaemon.join();
+        queryingDaemon.join();
+
+        System.out.println("- Finishing mobile node");
+    }
+}
+
+class MobileNodeKeepaliveDaemon extends Thread{
+    private MobileNode representativeNode;
+
+    public MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
+        this.representativeNode = representativeNode;
+    }
+
+    public void queryPeers() {
+        try {
+            while (true) {
+                representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
+                Thread.sleep(5000);
+                representativeNode.queryPeers();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void run () {
+        System.out.println("- Starting keepalive daemon");
+        queryPeers();
+    }
+}
+
+class MobileNodeListeningDaemon extends Thread{
+    private MobileNode representativeNode;
+
+    public MobileNodeListeningDaemon(MobileNode representativeNode) {
+        this.representativeNode = representativeNode;
+    }
+
     public void listenForPeers() {
         System.out.println("- Listening...");
         try {
             while(true) {
-                receiveServerSocket.receive(receivePacket);
-                byte[] data = receivePacket.getData();
+                representativeNode.receiveServerSocket.receive(representativeNode.receivePacket);
+                byte[] data = representativeNode.receivePacket.getData();
 
                 ByteArrayInputStream in = new ByteArrayInputStream(data);
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
@@ -150,10 +193,9 @@ public class MobileNode {
         }
     }
 
+    @Override
     public void run() {
-        System.out.println("- Starting mobile node");
-        sendHelloMessage(AddressType.LINK_MULTICAST.toString());
-        new Thread(new MobileNodeKeepaliveDaemon(this)).start();
+        System.out.println("- Starting listening daemon");
         listenForPeers();
     }
 }
