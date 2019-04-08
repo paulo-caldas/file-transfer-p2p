@@ -1,7 +1,11 @@
-package PDU;
+package main.PDU;
 
-import Enum.MobileNetworkMessageType;
-import Enum.MobileNetworkErrorType;
+import main.ContentReference;
+import main.Enum.MobileNetworkMessageType;
+import main.Enum.MobileNetworkErrorType;
+
+import java.util.List;
+import java.util.Map;
 
 public class HelloMobileNetworkPDU extends MobileNetworkPDU {
 
