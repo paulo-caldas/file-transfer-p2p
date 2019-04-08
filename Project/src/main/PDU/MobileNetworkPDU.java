@@ -1,6 +1,6 @@
-package PDU;
+package main.PDU;
 
-import Enum.*;
+import main.Enum.*;
 
 import java.io.Serializable;
 
