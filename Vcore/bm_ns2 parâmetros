@@ -1,0 +1,17 @@
+gerar arquivo bonmotion
+
+./bm -f "nome arquivo"  "modelo de movimento" -n  -d -i -h -l -p -x -y
+./bm -f kadu  RandomWaypoint -n 10 -d 900 -i 3600 -h 7.0 -l 4.0 -p 2.0 -x 500 -y 500
+
+onde -n é o número de nós
+            -d é o tempo de simulação
+            -i amostragem não contabilizada
+            -h é a velocidade máxima dos nós em m/s
+	    -l é a velocidade mínima dos nós em m/s
+	    -p tempo de pausa dos nós
+	    -x é a largura do mapa
+	    -y é a altura do mapa
+
+Coverter para ns2
+
+./bm NSFile -f "nome do arquivo"
