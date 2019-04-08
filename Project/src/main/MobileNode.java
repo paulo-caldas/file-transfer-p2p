@@ -1,12 +1,15 @@
+package main;
+
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import Enum.*;
-import PDU.HelloMobileNetworkPDU;
-import PDU.MobileNetworkPDU;
+import main.Enum.*;
+import main.PDU.HelloMobileNetworkPDU;
+import main.PDU.MobileNetworkPDU;
 
 /*
  *
@@ -17,6 +20,8 @@ import PDU.MobileNetworkPDU;
  */
 
 public class MobileNode {
+    public File sharingDirectory;
+
     MulticastSocket receiveServerSocket;
     MulticastSocket sendServerSocket;
 
@@ -28,9 +33,15 @@ public class MobileNode {
 
     byte[] buffer;
     private String macAddr;
-    private Map<String,List<String>> contentTable; // Maps content IDs to the nodes that provide them
+    private Map<String,List<ContentReference>> contentTable;
 
-    public MobileNode() {
+    public MobileNode(File sharingDirectory) throws IOException{
+        if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
+            throw new IOException("No such directory");
+        }
+
+        System.out.println("Sharing directory: " + sharingDirectory.getCanonicalPath());
+
         try {
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
             InetAddress group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());

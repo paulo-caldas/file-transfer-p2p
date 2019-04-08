@@ -1,6 +1,6 @@
-package PDU;
+package main.PDU;
 
-import Enum.*;
+import main.Enum.*;
 
 public class ResponseContentMobileNetworkPDU extends ContentMobileNetworkPDU {
 
