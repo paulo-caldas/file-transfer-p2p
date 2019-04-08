@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import Enum.*;
+import PDU.HelloMobileNetworkPDU;
 import PDU.MobileNetworkPDU;
 
 /*
@@ -59,13 +60,14 @@ public class MobileNode {
 
     public void sendHelloMessage(String dstMac) {
         System.out.println("- Sending hello message to " + dstMac);
-        MobileNetworkPDU helloPacket = new MobileNetworkPDU(
+        MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
                 macAddr,
                 dstMac,
                 MobileNetworkMessageType.HELLO,
                 MobileNetworkErrorType.VALID,
                 62,
-                "0");
+                "0",
+                contentTable);
 
         sendPDU(helloPacket);
     }
