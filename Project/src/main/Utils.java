@@ -1,3 +1,5 @@
+package main;
+
 public class Utils {
 
     public static String macByteArrToString(byte[] mac) {
