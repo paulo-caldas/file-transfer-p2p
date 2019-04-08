@@ -1,8 +1,8 @@
-package main.PDU;
+package main.java.PDU;
 
-import main.ContentReference;
-import main.Enum.MobileNetworkMessageType;
-import main.Enum.MobileNetworkErrorType;
+import ContentReference;
+import Enum.MobileNetworkMessageType;
+import Enum.MobileNetworkErrorType;
 
 import java.util.List;
 import java.util.Map;

@@ -1,7 +1,7 @@
-package main.PDU;
+package PDU;
 
 import java.util.List;
-import main.Enum.*;
+import Enum.*;
 
 public class ContentMobileNetworkPDU extends MobileNetworkPDU {
     String contentID;

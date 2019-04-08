@@ -1,4 +1,4 @@
-package main.Enum;
+package Enum;
 
 public enum AddressType {
     LINK_BROADCAST("FF:FF:FF:FF:FF:FF"),

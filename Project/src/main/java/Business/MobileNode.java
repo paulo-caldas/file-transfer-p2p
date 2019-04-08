@@ -1,15 +1,16 @@
-package main;
+package main.java;
 
 import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import main.Enum.*;
-import main.PDU.HelloMobileNetworkPDU;
-import main.PDU.MobileNetworkPDU;
+import main.java.Enum.*;
+import main.java.PDU.HelloMobileNetworkPDU;
+import main.java.PDU.MobileNetworkPDU;
+
+import org.apache.commons.codec.digest.DigestUtils;
 
 /*
  *
@@ -36,11 +37,14 @@ public class MobileNode {
     private Map<String,List<ContentReference>> contentTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
+        this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
             throw new IOException("No such directory");
         }
 
-        System.out.println("Sharing directory: " + sharingDirectory.getCanonicalPath());
+        System.out.println("- Sharing directory: " + sharingDirectory.getCanonicalPath());
+
+        initContentTable(sharingDirectory);
 
         try {
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
@@ -62,14 +66,34 @@ public class MobileNode {
             receivePacket = new DatagramPacket(new byte[1024], 1024);
 
             sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
-
-            contentTable = new HashMap<>();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public void sendHelloMessage(String dstMac) {
+    private void initContentTable(File startingFile) {
+        for (File file : startingFile.listFiles()) {
+            if (file.isFile()) {
+
+                try {
+                    String hash = hashfile(file);
+
+                    System.out.println("- Hashed " + file + ":" + hash);
+                } catch (IOException e) {}
+            } else {
+                initContentTable(file);
+            }
+        }
+    }
+
+    private String hashfile(File file) throws IOException {
+        InputStream is = Files.newInputStream(file.toPath());
+        String md5 = DigestUtils.md5Hex(is);
+
+        return md5;
+    }
+
+    protected void sendHelloMessage(String dstMac) {
         System.out.println("- Sending hello message to " + dstMac);
         MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
                 macAddr,
@@ -83,7 +107,7 @@ public class MobileNode {
         sendPDU(helloPacket);
     }
 
-    public void sendPingMessage(String dstMac) {
+    protected void sendPingMessage(String dstMac) {
         System.out.println("- Sending hello message to " + dstMac);
         MobileNetworkPDU pingPacket = new MobileNetworkPDU(
                 macAddr,
@@ -97,7 +121,7 @@ public class MobileNode {
 
     }
 
-    public void sendPongMessage(String dstMac) {
+    protected void sendPongMessage(String dstMac) {
         System.out.println("- Sending pong message " + dstMac);
         MobileNetworkPDU pongPacket = new MobileNetworkPDU(
                 macAddr,
@@ -110,7 +134,7 @@ public class MobileNode {
         sendPDU(pongPacket);
     }
 
-    public void sendPDU(MobileNetworkPDU pdu) {
+    protected void sendPDU(MobileNetworkPDU pdu) {
         try {
             os.writeObject(pdu);
 
