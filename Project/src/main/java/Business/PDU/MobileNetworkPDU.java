@@ -1,6 +1,6 @@
-package main.java.PDU;
+package Business.PDU;
 
-import main.java.Enum.*;
+import Business.Enum.*;
 
 import java.io.Serializable;
 

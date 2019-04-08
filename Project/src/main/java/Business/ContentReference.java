@@ -1,3 +1,5 @@
+package Business;
+
 public class ContentReference {
 
     private String contentID;

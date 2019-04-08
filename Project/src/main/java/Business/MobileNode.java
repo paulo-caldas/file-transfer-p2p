@@ -1,4 +1,4 @@
-package main.java;
+package Business;
 
 import java.io.*;
 import java.net.*;
@@ -6,9 +6,9 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
-import main.java.Enum.*;
-import main.java.PDU.HelloMobileNetworkPDU;
-import main.java.PDU.MobileNetworkPDU;
+import Business.Enum.*;
+import Business.PDU.HelloMobileNetworkPDU;
+import Business.PDU.MobileNetworkPDU;
 
 import org.apache.commons.codec.digest.DigestUtils;
 
@@ -34,7 +34,7 @@ public class MobileNode {
 
     byte[] buffer;
     private String macAddr;
-    private Map<String,List<ContentReference>> contentTable;
+    private Map<String, List<ContentReference>> contentTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
         this.sharingDirectory = sharingDirectory;

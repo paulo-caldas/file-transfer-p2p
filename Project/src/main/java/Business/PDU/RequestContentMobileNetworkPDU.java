@@ -1,6 +1,6 @@
-package main.java.PDU;
+package Business.PDU;
 
-import main.java.Enum.*;
+import Business.Enum.*;
 
 public class RequestContentMobileNetworkPDU extends ContentMobileNetworkPDU {
     public RequestContentMobileNetworkPDU(String srcMAC, String dstMAC, MobileNetworkMessageType messageType, MobileNetworkErrorType errorCode, int TTL, String sessionID, String contentID) {

@@ -1,6 +1,6 @@
-package main.java.PDU;
+package Business.PDU;
 
-import main.java.Enum.*;
+import Business.Enum.*;
 
 public class ResponseContentMobileNetworkPDU extends ContentMobileNetworkPDU {
 

@@ -1,7 +1,11 @@
-package PDU;
+package Business.PDU;
+
+import Business.Enum.MobileNetworkMessageType;
+import Business.Enum.MobileNetworkErrorType;
+
 
 import java.util.List;
-import Enum.*;
+
 
 public class ContentMobileNetworkPDU extends MobileNetworkPDU {
     String contentID;
