@@ -2,21 +2,19 @@ package Business;
 
 import java.io.*;
 import java.net.*;
-import java.nio.file.Files;
-import java.util.List;
+import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 
 import Business.Enum.*;
 import Business.PDU.HelloMobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU;
 
-import org.apache.commons.codec.digest.DigestUtils;
-
 /*
+ *   ContentRoutingTable
  *
- *   | Content-ID |   Node-IDs
- *   | 123        |   999,888
- *   | 789        |   777
+ *   | Content-ID | Node-IDs  | Next hop
+ *   | 123        | 999       |  123
+ *   | 789        | 777       |  543
  *
  */
 
@@ -34,7 +32,8 @@ public class MobileNode {
 
     byte[] buffer;
     private String macAddr;
-    private Map<String, List<ContentReference>> contentTable;
+
+    private Map<String, MobileRoutingTableEntry> contentRoutingTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
         this.sharingDirectory = sharingDirectory;
@@ -45,6 +44,8 @@ public class MobileNode {
         System.out.println("- Sharing directory: " + sharingDirectory.getCanonicalPath());
 
         initContentTable(sharingDirectory);
+
+        System.out.println(contentRoutingTable.toString());
 
         try {
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
@@ -71,26 +72,23 @@ public class MobileNode {
         }
     }
 
+    public Map<String, MobileRoutingTableEntry> getContentRoutingTable() {
+        return contentRoutingTable;
+    }
+
     private void initContentTable(File startingFile) {
         for (File file : startingFile.listFiles()) {
             if (file.isFile()) {
 
                 try {
-                    String hash = hashfile(file);
-
-                    System.out.println("- Hashed " + file + ":" + hash);
-                } catch (IOException e) {}
+                    String fileHash = Utils.hashFile(file, "md5");
+                    contentRoutingTable.put( fileHash, new MobileRoutingTableEntry(fileHash, macAddr, null, 0));
+                    System.out.println("- Hashed " + file + ":" + fileHash);
+                } catch (IOException | NoSuchAlgorithmException e) {}
             } else {
                 initContentTable(file);
             }
         }
-    }
-
-    private String hashfile(File file) throws IOException {
-        InputStream is = Files.newInputStream(file.toPath());
-        String md5 = DigestUtils.md5Hex(is);
-
-        return md5;
     }
 
     protected void sendHelloMessage(String dstMac) {
@@ -102,7 +100,7 @@ public class MobileNode {
                 MobileNetworkErrorType.VALID,
                 62,
                 "0",
-                contentTable);
+                contentRoutingTable);
 
         sendPDU(helloPacket);
     }
@@ -187,6 +185,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
         try {
             while (true) {
                 representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
+                // TODO: update peers as dead
                 Thread.sleep(5000);
                 representativeNode.queryPeers();
             }
@@ -221,7 +220,65 @@ class MobileNodeListeningDaemon extends Thread{
 
                 MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
 
-                System.out.println("Got: " + pdu.toString());
+                MobileNetworkMessageType messageType = pdu.getMessageType();
+
+                switch (messageType) {
+                    case HELLO:
+                        HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
+                        Map<String, MobileRoutingTableEntry> peerContentRoutingTable = helloPDU.getContentRoutingTable();
+                        for (Map.Entry<String,MobileRoutingTableEntry> tableEntry : peerContentRoutingTable.entrySet()) {
+                            representativeNode.getContentRoutingTable().put(
+                                    tableEntry.getKey(),
+                                    new MobileRoutingTableEntry(
+                                            tableEntry.getValue().getFileHash(),
+                                            tableEntry.getValue().getDstMAC(),
+                                            pdu.getSrcMAC(),
+                                            1 + tableEntry.getValue().getHopCount())
+                                    );
+                        }
+                        break;
+                    case PING:
+                        representativeNode.sendPongMessage(pdu.getDstMAC());
+                        break;
+                    case PONG:
+                        // TODO: Update peer as alive
+                        break;
+                    case REQUEST_CONTENT:
+                        /**
+                         * TODO
+                         * if multicast_message
+                         *     if have content
+                         *         send reply_content
+                         *     else
+                         *         push_path
+                         *         propagate_message
+                         * else if direct_message
+                         *     next_hop = check_routing_table
+                         *          if this == next_hop
+                         *              send reply_content
+                         *          if neighbour == next_hop
+                         *              push_path
+                         *              propagate_message
+                         *          else
+                         *              drop
+                         */
+                        break;
+                    case REPLY_CONTENT:
+                        /**
+                         * TODO:
+                         * next_hop = pop_router_path_and_validate
+                         *     if not this == next_hop
+                         *         abort
+                         *     else if router_path_is_empty
+                         *         download_content
+                         *         else
+                         *             forward_message_to_tail
+                         */
+                        break;
+                    default:
+                        // drop
+                        break;
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
