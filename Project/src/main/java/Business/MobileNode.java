@@ -3,11 +3,17 @@ package Business;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.util.Calendar;
 import java.util.Map;
 
-import Business.Enum.*;
+import Business.Enum.MobileNetworkErrorType;
 import Business.PDU.HelloMobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU;
+
+import Business.Enum.MobileNetworkMessageType;
+import Business.Enum.AddressType;
 
 /*
  *   ContentRoutingTable
@@ -31,9 +37,11 @@ public class MobileNode {
     ObjectOutputStream os;
 
     byte[] buffer;
+
     private String macAddr;
 
-    private Map<String, MobileRoutingTableEntry> contentRoutingTable;
+    private ContentRoutingTable contentRoutingTable;
+    private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
         this.sharingDirectory = sharingDirectory;
@@ -41,11 +49,6 @@ public class MobileNode {
             throw new IOException("No such directory");
         }
 
-        System.out.println("- Sharing directory: " + sharingDirectory.getCanonicalPath());
-
-        initContentTable(sharingDirectory);
-
-        System.out.println(contentRoutingTable.toString());
 
         try {
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
@@ -53,6 +56,13 @@ public class MobileNode {
             Integer port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
 
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
+
+            System.out.println("- Sharing directory: " + sharingDirectory.getCanonicalPath());
+
+            this.contentRoutingTable = new ContentRoutingTable(this.macAddr);
+            this.contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
+
+            System.out.println(contentRoutingTable.toString());
 
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
@@ -67,28 +77,22 @@ public class MobileNode {
             receivePacket = new DatagramPacket(new byte[1024], 1024);
 
             sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
-        } catch (IOException e) {
+        } catch (IOException |NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
     }
 
-    public Map<String, MobileRoutingTableEntry> getContentRoutingTable() {
+    public String getMacAddr() {
+        return macAddr;
+    }
+
+
+    ContentRoutingTable getContentRoutingTable() {
         return contentRoutingTable;
     }
 
-    private void initContentTable(File startingFile) {
-        for (File file : startingFile.listFiles()) {
-            if (file.isFile()) {
-
-                try {
-                    String fileHash = Utils.hashFile(file, "md5");
-                    contentRoutingTable.put( fileHash, new MobileRoutingTableEntry(fileHash, macAddr, null, 0));
-                    System.out.println("- Hashed " + file + ":" + fileHash);
-                } catch (IOException | NoSuchAlgorithmException e) {}
-            } else {
-                initContentTable(file);
-            }
-        }
+    PeerKeepaliveTable getPeerKeepaliveTable() {
+        return peerKeepaliveTable;
     }
 
     protected void sendHelloMessage(String dstMac) {
@@ -145,11 +149,6 @@ public class MobileNode {
         }
     }
 
-    // Query if my peers are alive or not by sending pings and awaiting for pongs
-    public void queryPeers() {
-
-    }
-
     public void addPeer(String peerMAC) {
 
     }
@@ -176,18 +175,24 @@ public class MobileNode {
 
 class MobileNodeKeepaliveDaemon extends Thread{
     private MobileNode representativeNode;
+    private PeerKeepaliveTable keepaliveTable;
+    private final int KEEPAWAY_TIME_MS = 5000;
 
-    public MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
+    MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
         this.representativeNode = representativeNode;
+        this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
     }
 
-    public void queryPeers() {
+    void queryPeers() {
+        String timestampOfNow;
+
         try {
             while (true) {
+                timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
+                keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
                 representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
-                // TODO: update peers as dead
-                Thread.sleep(5000);
-                representativeNode.queryPeers();
+                Thread.sleep(KEEPAWAY_TIME_MS);
+                keepaliveTable.applyStrikeWave();
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -203,12 +208,17 @@ class MobileNodeKeepaliveDaemon extends Thread{
 
 class MobileNodeListeningDaemon extends Thread{
     private MobileNode representativeNode;
+    private ContentRoutingTable routingTable;
+    private PeerKeepaliveTable keepaliveTable;
 
-    public MobileNodeListeningDaemon(MobileNode representativeNode) {
+
+    MobileNodeListeningDaemon(MobileNode representativeNode) {
         this.representativeNode = representativeNode;
+        this.routingTable = representativeNode.getContentRoutingTable();
+        this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
     }
 
-    public void listenForPeers() {
+    private void listenForPeers() {
         System.out.println("- Listening...");
         try {
             while(true) {
@@ -222,26 +232,24 @@ class MobileNodeListeningDaemon extends Thread{
 
                 MobileNetworkMessageType messageType = pdu.getMessageType();
 
+                String peerID = pdu.getSrcMAC();
+
                 switch (messageType) {
                     case HELLO:
-                        HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
-                        Map<String, MobileRoutingTableEntry> peerContentRoutingTable = helloPDU.getContentRoutingTable();
-                        for (Map.Entry<String,MobileRoutingTableEntry> tableEntry : peerContentRoutingTable.entrySet()) {
-                            representativeNode.getContentRoutingTable().put(
-                                    tableEntry.getKey(),
-                                    new MobileRoutingTableEntry(
-                                            tableEntry.getValue().getFileHash(),
-                                            tableEntry.getValue().getDstMAC(),
-                                            pdu.getSrcMAC(),
-                                            1 + tableEntry.getValue().getHopCount())
-                                    );
+                        if (!keepaliveTable.hasPeer(peerID)) {
+                            HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
+                            ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
+
+                            routingTable.mergeWithPeerContentTable(peerContentRoutingTable, pdu.getSrcMAC());
+                            keepaliveTable.markAsAlive(peerID);
                         }
                         break;
                     case PING:
                         representativeNode.sendPongMessage(pdu.getDstMAC());
                         break;
                     case PONG:
-                        // TODO: Update peer as alive
+                        String sessionID = pdu.getSessionID();
+                        keepaliveTable.markAsAlive(sessionID, peerID);
                         break;
                     case REQUEST_CONTENT:
                         /**
