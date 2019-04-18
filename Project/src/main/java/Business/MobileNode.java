@@ -6,7 +6,11 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Map;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import Business.Enum.MobileNetworkErrorType;
 import Business.PDU.HelloMobileNetworkPDU;
@@ -25,7 +29,8 @@ import Business.Enum.AddressType;
  */
 
 public class MobileNode {
-    public File sharingDirectory;
+    final static Logger LOGGER = Logger.getLogger(MobileNode.class.getName());
+    File sharingDirectory;
 
     MulticastSocket receiveServerSocket;
     MulticastSocket sendServerSocket;
@@ -44,6 +49,8 @@ public class MobileNode {
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
+        LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+
         this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
             throw new IOException("No such directory");
@@ -57,12 +64,10 @@ public class MobileNode {
 
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
-            System.out.println("- Sharing directory: " + sharingDirectory.getCanonicalPath());
+            LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath().toString());
 
             this.contentRoutingTable = new ContentRoutingTable(this.macAddr);
             this.contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
-
-            System.out.println(contentRoutingTable.toString());
 
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
@@ -96,7 +101,7 @@ public class MobileNode {
     }
 
     protected void sendHelloMessage(String dstMac) {
-        System.out.println("- Sending hello message to " + dstMac);
+        LOGGER.log(Level.INFO, "Sending HELLO message to " + dstMac);
         MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
                 macAddr,
                 dstMac,
@@ -110,7 +115,7 @@ public class MobileNode {
     }
 
     protected void sendPingMessage(String dstMac) {
-        System.out.println("- Sending hello message to " + dstMac);
+        LOGGER.log(Level.INFO, "Sending PING message to " + dstMac);
         MobileNetworkPDU pingPacket = new MobileNetworkPDU(
                 macAddr,
                 dstMac,
@@ -124,7 +129,7 @@ public class MobileNode {
     }
 
     protected void sendPongMessage(String dstMac) {
-        System.out.println("- Sending pong message " + dstMac);
+        LOGGER.log(Level.INFO, "Sending PONG message to " + dstMac);
         MobileNetworkPDU pongPacket = new MobileNetworkPDU(
                 macAddr,
                 dstMac,
@@ -155,7 +160,7 @@ public class MobileNode {
 
 
     public void run() throws InterruptedException {
-        System.out.println("- Starting mobile node");
+        LOGGER.log(Level.INFO, "Starting mobile node process");
 
         // Listens for incoming messages
         Thread listeningDaemon = new Thread(new MobileNodeListeningDaemon(this));
@@ -169,16 +174,22 @@ public class MobileNode {
         listeningDaemon.join();
         queryingDaemon.join();
 
-        System.out.println("- Finishing mobile node");
+        LOGGER.log(Level.INFO, "Finishing mobile node process");
     }
 }
 
 class MobileNodeKeepaliveDaemon extends Thread{
+    private final static Logger LOGGER = Logger.getLogger(MobileNodeKeepaliveDaemon.class.getName());
     private MobileNode representativeNode;
     private PeerKeepaliveTable keepaliveTable;
     private final int KEEPAWAY_TIME_MS = 5000;
 
     MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
+        try {
+            LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         this.representativeNode = representativeNode;
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
     }
@@ -192,7 +203,8 @@ class MobileNodeKeepaliveDaemon extends Thread{
                 keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
                 representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
                 Thread.sleep(KEEPAWAY_TIME_MS);
-                keepaliveTable.applyStrikeWave();
+                List<String> removedPeers = keepaliveTable.applyStrikeWave();
+                LOGGER.log(Level.INFO, "Removed peers: " + removedPeers.toString());
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -207,19 +219,25 @@ class MobileNodeKeepaliveDaemon extends Thread{
 }
 
 class MobileNodeListeningDaemon extends Thread{
+    private final static Logger LOGGER = Logger.getLogger(MobileNodeKeepaliveDaemon.class.getName());
     private MobileNode representativeNode;
     private ContentRoutingTable routingTable;
     private PeerKeepaliveTable keepaliveTable;
 
 
     MobileNodeListeningDaemon(MobileNode representativeNode) {
+        try {
+            LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         this.representativeNode = representativeNode;
         this.routingTable = representativeNode.getContentRoutingTable();
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
     }
 
     private void listenForPeers() {
-        System.out.println("- Listening...");
+        LOGGER.log(Level.INFO, "Listening for peers");
         try {
             while(true) {
                 representativeNode.receiveServerSocket.receive(representativeNode.receivePacket);
