@@ -156,10 +156,13 @@ public class MobileNode {
     public void run() throws InterruptedException {
         LOGGER.log(Level.INFO, "Starting mobile node process");
 
+        // Initialize into the network by announcing everyone your presence
+        sendHelloMessage(AddressType.NETWORK_MULTICAST.toString());
+
         // Listens for incoming messages
         Thread listeningDaemon = new Thread(new MobileNodeListeningDaemon(this));
 
-        // Periodically queries peers if they're alive
+        // Periodically query peers if they're alive
         Thread queryingDaemon = new Thread(new MobileNodeKeepaliveDaemon(this));
 
         listeningDaemon.start();
