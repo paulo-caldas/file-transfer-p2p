@@ -63,7 +63,7 @@ public class MobileNode {
 
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
-            LOGGER.addHandler(new FileHandler(macAddr + "_MobileNode.log"));
+            LOGGER.addHandler(new FileHandler(macAddr + "_MobileNodeLog.xml"));
             LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath().toString());
 
 
@@ -244,93 +244,95 @@ class MobileNodeListeningDaemon extends Thread{
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
 
                 MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
-
                 MobileNetworkMessageType messageType = pdu.getMessageType();
-
                 String peerID = pdu.getSrcMAC();
+                String destination = pdu.getDstMAC();
 
-                switch (messageType) {
-                    case HELLO:
-                        boolean isNewEntry;
-                        boolean isMyself;
+                if (amIPartOfDestination(destination)) {
 
-                        synchronized (keepaliveTable) {
-                            isNewEntry = !keepaliveTable.hasPeer(peerID);
-                        }
-                            isMyself = peerID.equals(representativeNode.getMacAddr());
-                        if (isNewEntry && !isMyself)  {
-                            LOGGER.log(Level.INFO, "Received: " + pdu.toString());
-
-                            HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
-                            ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
-
-                            routingTable.mergeWithPeerContentTable(peerContentRoutingTable, pdu.getSrcMAC());
+                    switch (messageType) {
+                        case HELLO:
+                            boolean isNewEntry;
+                            boolean isMyself;
 
                             synchronized (keepaliveTable) {
-                                keepaliveTable.markAsAlive(peerID);
+                                isNewEntry = !keepaliveTable.hasPeer(peerID);
                             }
-                        }
-                        break;
-                    case PING:
-                        LOGGER.log(Level.INFO, "Received: " + pdu.toString());
-                        boolean alreadyKnowPeer;
-                        synchronized (keepaliveTable) {
-                            alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
-                        }
-                        if (alreadyKnowPeer) {
-                            representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
-                        } else {
-                           representativeNode.sendHelloMessage(pdu.getSrcMAC());
-                        }
-                        break;
-                    case PONG:
-                        LOGGER.log(Level.INFO, "Received: " + pdu.toString());
-                        String sessionID = pdu.getSessionID();
-                        boolean isPingRecent;
-                        synchronized (keepaliveTable) {
-                            isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
-                        }
-                        if (isPingRecent) {
-                            LOGGER.log(Level.INFO, "Marked peer " + peerID + " as alive");
-                        } else {
-                            LOGGER.log(Level.INFO, "Received outdated keepalive from " + peerID);
-                        }
-                        break;
-                    case REQUEST_CONTENT:
-                        /**
-                         * TODO
-                         * if multicast_message
-                         *     if have content
-                         *         send reply_content
-                         *     else
-                         *         push_path
-                         *         propagate_message
-                         * else if direct_message
-                         *     next_hop = check_routing_table
-                         *          if this == next_hop
-                         *              send reply_content
-                         *          if neighbour == next_hop
-                         *              push_path
-                         *              propagate_message
-                         *          else
-                         *              drop
-                         */
-                        break;
-                    case REPLY_CONTENT:
-                        /**
-                         * TODO:
-                         * next_hop = pop_router_path_and_validate
-                         *     if not this == next_hop
-                         *         abort
-                         *     else if router_path_is_empty
-                         *         download_content
-                         *         else
-                         *             forward_message_to_tail
-                         */
-                        break;
-                    default:
-                        // drop
-                        break;
+                            isMyself = peerID.equals(representativeNode.getMacAddr());
+                            if (isNewEntry && !isMyself) {
+                                LOGGER.log(Level.INFO, "Received: " + pdu.toString());
+
+                                HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
+                                ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
+
+                                routingTable.mergeWithPeerContentTable(peerContentRoutingTable, pdu.getSrcMAC());
+
+                                synchronized (keepaliveTable) {
+                                    keepaliveTable.markAsAlive(peerID);
+                                }
+                            }
+                            break;
+                        case PING:
+                            LOGGER.log(Level.INFO, "Received: " + pdu.toString());
+                            boolean alreadyKnowPeer;
+                            synchronized (keepaliveTable) {
+                                alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
+                            }
+                            if (alreadyKnowPeer) {
+                                representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
+                            } else {
+                                representativeNode.sendHelloMessage(pdu.getSrcMAC());
+                            }
+                            break;
+                        case PONG:
+                            LOGGER.log(Level.INFO, "Received: " + pdu.toString());
+                            String sessionID = pdu.getSessionID();
+                            boolean isPingRecent;
+                            synchronized (keepaliveTable) {
+                                isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
+                            }
+                            if (isPingRecent) {
+                                LOGGER.log(Level.INFO, "Marked peer " + peerID + " as alive");
+                            } else {
+                                LOGGER.log(Level.INFO, "Received outdated keepalive from " + peerID);
+                            }
+                            break;
+                        case REQUEST_CONTENT:
+                            /**
+                             * TODO
+                             * if multicast_message
+                             *     if have content
+                             *         send reply_content
+                             *     else
+                             *         push_path
+                             *         propagate_message
+                             * else if direct_message
+                             *     next_hop = check_routing_table
+                             *          if this == next_hop
+                             *              send reply_content
+                             *          if neighbour == next_hop
+                             *              push_path
+                             *              propagate_message
+                             *          else
+                             *              drop
+                             */
+                            break;
+                        case REPLY_CONTENT:
+                            /**
+                             * TODO:
+                             * next_hop = pop_router_path_and_validate
+                             *     if not this == next_hop
+                             *         abort
+                             *     else if router_path_is_empty
+                             *         download_content
+                             *         else
+                             *             forward_message_to_tail
+                             */
+                            break;
+                        default:
+                            // drop
+                            break;
+                    }
                 }
             }
         } catch (IOException e) {
@@ -338,6 +340,12 @@ class MobileNodeListeningDaemon extends Thread{
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
+    }
+
+    private boolean amIPartOfDestination(String destination) {
+        return (destination.equals(representativeNode.getMacAddr())
+                || destination.equals(AddressType.LINK_BROADCAST.toString())
+                || destination.equals(AddressType.LINK_MULTICAST.toString()));
     }
 
     @Override
