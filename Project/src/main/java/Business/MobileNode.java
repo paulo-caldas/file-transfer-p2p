@@ -113,7 +113,7 @@ public class MobileNode {
         sendPDU(helloPacket);
     }
 
-    protected void sendPingMessage(String dstMac) {
+    protected void sendPingMessage(String dstMac, String sessionID) {
         LOGGER.log(Level.INFO, "Sending PING message to " + dstMac);
         MobileNetworkPDU pingPacket = new MobileNetworkPDU(
                 macAddr,
@@ -121,13 +121,13 @@ public class MobileNode {
                 MobileNetworkMessageType.PING,
                 MobileNetworkErrorType.VALID,
                 62,
-                "0");
+                sessionID);
 
         sendPDU(pingPacket);
 
     }
 
-    protected void sendPongMessage(String dstMac) {
+    protected void sendPongMessage(String dstMac, String sessionID) {
         LOGGER.log(Level.INFO, "Sending PONG message to " + dstMac);
         MobileNetworkPDU pongPacket = new MobileNetworkPDU(
                 macAddr,
@@ -135,7 +135,7 @@ public class MobileNode {
                 MobileNetworkMessageType.PONG,
                 MobileNetworkErrorType.VALID,
                 62,
-                "0");
+                sessionID);
 
         sendPDU(pongPacket);
     }
@@ -192,14 +192,13 @@ class MobileNodeKeepaliveDaemon extends Thread{
     }
 
     void queryPeers() {
-        String timestampOfNow;
 
         try {
             while (true) {
-                timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
+                String timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
                 synchronized (keepaliveTable) {
                     keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
-                    keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer));
+                    keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow));
                 }
                 Thread.sleep(KEEPAWAY_TIME_MS);
                 List<String> removedPeers = keepaliveTable.applyStrikeWave();
@@ -272,7 +271,7 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                         break;
                     case PING:
-                        representativeNode.sendPongMessage(pdu.getDstMAC());
+                        representativeNode.sendPongMessage(pdu.getDstMAC(), pdu.getSessionID());
                         break;
                     case PONG:
                         String sessionID = pdu.getSessionID();
