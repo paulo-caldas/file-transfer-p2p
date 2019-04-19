@@ -147,6 +147,7 @@ public class MobileNode {
     protected void sendPDU(MobileNetworkPDU pdu) {
         try {
             os.writeObject(pdu);
+            os.flush();
 
             buffer = outputStream.toByteArray();
             sendPacket.setData(buffer);
