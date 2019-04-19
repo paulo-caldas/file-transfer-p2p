@@ -8,6 +8,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry>, Serializable {
 
@@ -24,13 +26,14 @@ public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry
      *
      * @param initialPath directory to start from
      */
-    public void recursivePopulateWithLocalContent(File initialPath) throws IOException, NoSuchAlgorithmException {
+    public void recursivePopulateWithLocalContent(File initialPath, Logger logger) throws IOException, NoSuchAlgorithmException {
         for (File currPath : initialPath.listFiles()) {
             if (currPath.isFile()) {
                 String fileHash = Utils.hashFile(currPath, "md5");
+                logger.log(Level.INFO, "Adding to file index: (" + currPath.getName() + "," + fileHash + ")");
                 contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, null, 0));
             } else {
-                recursivePopulateWithLocalContent(currPath);
+                recursivePopulateWithLocalContent(currPath, logger);
             }
         }
     }

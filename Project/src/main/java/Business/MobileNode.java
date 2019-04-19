@@ -64,11 +64,10 @@ public class MobileNode {
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
             LOGGER.addHandler(new FileHandler(macAddr + "_MobileNodeLog.xml"));
-            LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath().toString());
-
+            LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath());
 
             contentRoutingTable = new ContentRoutingTable(this.macAddr);
-            contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
+            contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory, LOGGER);
 
             peerKeepaliveTable = new PeerKeepaliveTable("n/a", 3);
 
