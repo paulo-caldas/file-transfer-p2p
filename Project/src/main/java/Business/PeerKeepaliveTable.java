@@ -46,10 +46,13 @@ public class PeerKeepaliveTable<A,B> {
         peerKeepaliveTable.put(peerId, -1);
     }
 
-    public void markAsAlive(A receivedSessionId,B peerId) {
+    public boolean markAsAlive(A receivedSessionId,B peerId) {
         if (receivedSessionId.equals(currentKeepaliveSessionID)) {
             markAsAlive(peerId);
+            return true;
         }
+
+        return false;
     }
 
 }

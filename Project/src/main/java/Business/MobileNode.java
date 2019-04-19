@@ -275,8 +275,14 @@ class MobileNodeListeningDaemon extends Thread{
                         break;
                     case PONG:
                         String sessionID = pdu.getSessionID();
+                        boolean isPingRecent;
                         synchronized (keepaliveTable) {
-                            keepaliveTable.markAsAlive(sessionID, peerID);
+                            isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
+                        }
+                        if (isPingRecent) {
+                            LOGGER.log(Level.INFO, "Marked peer " + peerID + " as alive");
+                        } else {
+                            LOGGER.log(Level.INFO, "Received outdated keepalive from " + peerID);
                         }
                         break;
                     case REQUEST_CONTENT:
