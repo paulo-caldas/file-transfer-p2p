@@ -272,7 +272,15 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                         break;
                     case PING:
-                        representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
+                        boolean alreadyKnowPeer;
+                        synchronized (keepaliveTable) {
+                            alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
+                        }
+                        if (alreadyKnowPeer) {
+                            representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
+                        } else {
+                           representativeNode.sendHelloMessage(pdu.getSrcMAC());
+                        }
                         break;
                     case PONG:
                         String sessionID = pdu.getSessionID();
