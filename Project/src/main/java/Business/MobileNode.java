@@ -197,7 +197,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
                 synchronized (keepaliveTable) {
                     keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
                 }
-                representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
+                representativeNode.sendPingMessage(AddressType.LINK_MULTICAST.toString());
                 Thread.sleep(KEEPAWAY_TIME_MS);
                 List<String> removedPeers = keepaliveTable.applyStrikeWave();
                 LOGGER.log(Level.INFO, "Removed peers: " + removedPeers.toString());
