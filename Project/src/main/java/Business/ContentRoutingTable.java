@@ -9,10 +9,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>, Serializable {
+public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry>, Serializable {
 
     private String ownerID;
-    private Map<String, MobileRoutingTableEntry> contentRoutingTable;
+    private Map<String, ContentRoutingTableEntry> contentRoutingTable;
 
     public ContentRoutingTable(String ownerID) {
         this.ownerID = ownerID;
@@ -28,7 +28,7 @@ public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>
         for (File currPath : initialPath.listFiles()) {
             if (currPath.isFile()) {
                 String fileHash = Utils.hashFile(currPath, "md5");
-                contentRoutingTable.put(fileHash, new MobileRoutingTableEntry(fileHash, ownerID, null, 0));
+                contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, null, 0));
             } else {
                 recursivePopulateWithLocalContent(currPath);
             }
@@ -37,10 +37,10 @@ public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>
 
     public void mergeWithPeerContentTable(ContentRoutingTable peerRoutingTable, String peerID) {
 
-        for (Map.Entry<String, MobileRoutingTableEntry> tableEntry : peerRoutingTable.entrySet()) {
+        for (Map.Entry<String, ContentRoutingTableEntry> tableEntry : peerRoutingTable.entrySet()) {
             this.put(
                     tableEntry.getKey(),
-                    new MobileRoutingTableEntry(
+                    new ContentRoutingTableEntry(
                             tableEntry.getValue().getFileHash(),
                             tableEntry.getValue().getDstMAC(),
                             peerID,
@@ -71,22 +71,22 @@ public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>
     }
 
     @Override
-    public MobileRoutingTableEntry get(Object o) {
+    public ContentRoutingTableEntry get(Object o) {
         return contentRoutingTable.get(o);
     }
 
     @Override
-    public MobileRoutingTableEntry put(String s, MobileRoutingTableEntry mobileRoutingTableEntry) {
+    public ContentRoutingTableEntry put(String s, ContentRoutingTableEntry mobileRoutingTableEntry) {
         return contentRoutingTable.put(s, mobileRoutingTableEntry);
     }
 
     @Override
-    public MobileRoutingTableEntry remove(Object o) {
+    public ContentRoutingTableEntry remove(Object o) {
         return contentRoutingTable.remove(o);
     }
 
     @Override
-    public void putAll(Map<? extends String, ? extends MobileRoutingTableEntry> map) {
+    public void putAll(Map<? extends String, ? extends ContentRoutingTableEntry> map) {
         contentRoutingTable.putAll(map);
     }
 
@@ -101,23 +101,23 @@ public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>
     }
 
     @Override
-    public Collection<MobileRoutingTableEntry> values() {
+    public Collection<ContentRoutingTableEntry> values() {
         return contentRoutingTable.values();
     }
 
     @Override
-    public Set<Entry<String, MobileRoutingTableEntry>> entrySet() {
+    public Set<Entry<String, ContentRoutingTableEntry>> entrySet() {
         return contentRoutingTable.entrySet();
     }
 }
 
-class MobileRoutingTableEntry {
+class ContentRoutingTableEntry implements Serializable {
     private String fileHash;
     private String dstMAC;
     private String nextHopMAC;
     private int hopCount;
 
-    public MobileRoutingTableEntry(String fileHash, String dstMAC, String nextHopMAC, int hopCount) {
+    public ContentRoutingTableEntry(String fileHash, String dstMAC, String nextHopMAC, int hopCount) {
         this.fileHash = fileHash;
         this.dstMAC = dstMAC;
         this.nextHopMAC = nextHopMAC;
