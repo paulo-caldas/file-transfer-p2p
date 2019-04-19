@@ -249,8 +249,6 @@ class MobileNodeListeningDaemon extends Thread{
 
                 String peerID = pdu.getSrcMAC();
 
-                LOGGER.log(Level.INFO, "Received: " + pdu.toString());
-
                 switch (messageType) {
                     case HELLO:
                         boolean isNewEntry;
@@ -261,6 +259,8 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                             isMyself = peerID.equals(representativeNode.getMacAddr());
                         if (isNewEntry && !isMyself)  {
+                            LOGGER.log(Level.INFO, "Received: " + pdu.toString());
+
                             HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
                             ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
 
@@ -272,6 +272,7 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                         break;
                     case PING:
+                        LOGGER.log(Level.INFO, "Received: " + pdu.toString());
                         boolean alreadyKnowPeer;
                         synchronized (keepaliveTable) {
                             alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
@@ -283,6 +284,7 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                         break;
                     case PONG:
+                        LOGGER.log(Level.INFO, "Received: " + pdu.toString());
                         String sessionID = pdu.getSessionID();
                         boolean isPingRecent;
                         synchronized (keepaliveTable) {
