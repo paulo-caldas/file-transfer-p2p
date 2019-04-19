@@ -47,13 +47,10 @@ public class MobileNode {
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
-        LOGGER.addHandler(new FileHandler(macAddr + "_MobileNode.log"));
-
         this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
             throw new IOException("No such directory");
         }
-
 
         try {
             NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
@@ -62,7 +59,9 @@ public class MobileNode {
 
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
+            LOGGER.addHandler(new FileHandler(macAddr + "_MobileNode.log"));
             LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath().toString());
+
 
             contentRoutingTable = new ContentRoutingTable(this.macAddr);
             contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
