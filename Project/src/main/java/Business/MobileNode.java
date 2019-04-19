@@ -46,7 +46,7 @@ public class MobileNode {
     private ContentRoutingTable contentRoutingTable;
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
-    private int currentHelloSessionID;
+    private Integer currentHelloSessionID;
 
     public MobileNode(File sharingDirectory) throws IOException{
         this.sharingDirectory = sharingDirectory;
@@ -111,7 +111,7 @@ public class MobileNode {
                 MobileNetworkMessageType.HELLO,
                 MobileNetworkErrorType.VALID,
                 62,
-                "0",
+                String.valueOf(currentHelloSessionID),
                 contentRoutingTable);
 
         sendPDU(helloPacket);
