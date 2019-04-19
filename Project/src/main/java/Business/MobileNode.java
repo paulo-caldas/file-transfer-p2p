@@ -75,9 +75,6 @@ public class MobileNode {
 
             sendServerSocket = new MulticastSocket(port);
 
-            outputStream = new ByteArrayOutputStream();
-            os = new ObjectOutputStream(outputStream);
-
             buffer = outputStream.toByteArray();
 
             receivePacket = new DatagramPacket(new byte[1024], 1024);
@@ -146,6 +143,9 @@ public class MobileNode {
 
     protected void sendPDU(MobileNetworkPDU pdu) {
         try {
+            outputStream = new ByteArrayOutputStream();
+            os = new ObjectOutputStream(outputStream);
+
             os.writeObject(pdu);
             os.flush();
 
