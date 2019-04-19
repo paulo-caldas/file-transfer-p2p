@@ -46,6 +46,8 @@ public class MobileNode {
     private ContentRoutingTable contentRoutingTable;
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
+    private int currentHelloSessionID;
+
     public MobileNode(File sharingDirectory) throws IOException{
         this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
@@ -81,6 +83,8 @@ public class MobileNode {
             receivePacket = new DatagramPacket(new byte[1024], 1024);
 
             sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
+
+            currentHelloSessionID = 0;
         } catch (IOException |NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
@@ -100,7 +104,7 @@ public class MobileNode {
     }
 
     protected void sendHelloMessage(String dstMac) {
-        LOGGER.log(Level.INFO, "Sending HELLO message to " + dstMac);
+        LOGGER.log(Level.INFO, "Sending HELLO message to " + dstMac + " with id " + currentHelloSessionID++);
         MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
                 macAddr,
                 dstMac,
