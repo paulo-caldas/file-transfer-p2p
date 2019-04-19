@@ -147,7 +147,7 @@ public class MobileNode {
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
 
-            LOGGER.log(Level.INFO, "SENT: " + pdu.toString());
+            LOGGER.log(Level.INFO, "Sent: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -281,6 +281,9 @@ class MobileNodeListeningDaemon extends Thread{
                             if (alreadyKnowPeer) {
                                 representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
                             } else {
+                                synchronized (keepaliveTable) {
+                                    keepaliveTable.markAsAlive(peerID);
+                                }
                                 representativeNode.sendHelloMessage(pdu.getSrcMAC());
                             }
                             break;
