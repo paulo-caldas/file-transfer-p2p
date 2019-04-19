@@ -3,11 +3,9 @@ package Business;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,7 +47,7 @@ public class MobileNode {
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     public MobileNode(File sharingDirectory) throws IOException{
-        LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+        LOGGER.addHandler(new FileHandler(macAddr + "_MobileNode.log"));
 
         this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
@@ -188,7 +186,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
 
     MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
         try {
-            LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+            LOGGER.addHandler(new FileHandler(representativeNode.getMacAddr() + "_MobileNodeKeepaliveDaemon.log"));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -221,7 +219,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
 }
 
 class MobileNodeListeningDaemon extends Thread{
-    private final static Logger LOGGER = Logger.getLogger(MobileNodeKeepaliveDaemon.class.getName());
+    private final static Logger LOGGER = Logger.getLogger(MobileNodeListeningDaemon.class.getName());
     private MobileNode representativeNode;
     private ContentRoutingTable routingTable;
     private PeerKeepaliveTable keepaliveTable;
@@ -229,7 +227,7 @@ class MobileNodeListeningDaemon extends Thread{
 
     MobileNodeListeningDaemon(MobileNode representativeNode) {
         try {
-            LOGGER.addHandler(new FileHandler("MobileNodeLogging.log"));
+            LOGGER.addHandler(new FileHandler(representativeNode.getMacAddr() + "_MobileNodeListeningDaemon.log"));
         } catch (IOException e) {
             e.printStackTrace();
         }
