@@ -252,6 +252,8 @@ class MobileNodeListeningDaemon extends Thread{
 
                 switch (messageType) {
                     case HELLO:
+                        LOGGER.log(Level.INFO, "Received HELLO from " + peerID);
+
                         boolean isNewEntry;
                         boolean isMyself;
 
@@ -271,10 +273,13 @@ class MobileNodeListeningDaemon extends Thread{
                         }
                         break;
                     case PING:
+                        LOGGER.log(Level.INFO, "Received PING from " + peerID);
+
                         representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
                         break;
                     case PONG:
                         LOGGER.log(Level.INFO, "Received PONG from " + peerID);
+
                         String sessionID = pdu.getSessionID();
                         boolean isPingRecent;
                         synchronized (keepaliveTable) {
