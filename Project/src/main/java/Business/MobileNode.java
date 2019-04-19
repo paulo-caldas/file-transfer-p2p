@@ -107,8 +107,6 @@ public class MobileNode {
                 62,
                 String.valueOf(currentHelloSessionID),
                 contentRoutingTable);
-
-        LOGGER.log(Level.INFO, ">" + helloPacket.toString());
         sendPDU(helloPacket);
         currentHelloSessionID++;
     }
@@ -121,9 +119,7 @@ public class MobileNode {
                 MobileNetworkErrorType.VALID,
                 62,
                 sessionID);
-        LOGGER.log(Level.INFO, ">" + pingPacket.toString());
         sendPDU(pingPacket);
-
     }
 
     protected void sendPongMessage(String dstMac, String sessionID) {
@@ -134,7 +130,6 @@ public class MobileNode {
                 MobileNetworkErrorType.VALID,
                 62,
                 sessionID);
-        LOGGER.log(Level.INFO, ">" + pongPacket.toString());
         sendPDU(pongPacket);
     }
 
@@ -151,6 +146,8 @@ public class MobileNode {
             sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
+
+            LOGGER.log(Level.INFO, "SENT: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -205,7 +202,10 @@ class MobileNodeKeepaliveDaemon extends Thread{
                 }
                 representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
                 Thread.sleep(KEEPAWAY_TIME_MS);
-                List<String> removedPeers = keepaliveTable.applyStrikeWave();
+                List<String> removedPeers;
+                synchronized (keepaliveTable) {
+                    removedPeers = keepaliveTable.applyStrikeWave();
+                }
                 LOGGER.log(Level.INFO, "Removed peers: " + removedPeers.toString());
             }
         } catch (InterruptedException e) {
@@ -254,7 +254,7 @@ class MobileNodeListeningDaemon extends Thread{
 
                 String peerID = pdu.getSrcMAC();
 
-                LOGGER.log(Level.INFO, "<"+pdu.toString());
+                LOGGER.log(Level.INFO, "Received: " + pdu.toString());
 
                 switch (messageType) {
                     case HELLO:
