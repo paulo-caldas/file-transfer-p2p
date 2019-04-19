@@ -42,6 +42,8 @@ public class MobileNode {
     byte[] buffer;
 
     private String macAddr;
+    InetAddress group;
+    Integer port;
 
     private ContentRoutingTable contentRoutingTable;
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
@@ -56,8 +58,8 @@ public class MobileNode {
 
         try {
             NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
-            InetAddress group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
-            Integer port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
+            group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
+            port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
 
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
 
@@ -75,11 +77,7 @@ public class MobileNode {
 
             sendServerSocket = new MulticastSocket(port);
 
-            buffer = outputStream.toByteArray();
-
             receivePacket = new DatagramPacket(new byte[1024], 1024);
-
-            sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
 
             currentHelloSessionID = 0;
         } catch (IOException |NoSuchAlgorithmException e) {
@@ -150,9 +148,10 @@ public class MobileNode {
             os.flush();
 
             buffer = outputStream.toByteArray();
+
+            sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
-
         } catch (IOException e) {
             e.printStackTrace();
         }
