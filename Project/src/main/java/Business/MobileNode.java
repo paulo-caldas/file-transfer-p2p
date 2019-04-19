@@ -256,7 +256,7 @@ class MobileNodeListeningDaemon extends Thread{
 
                 switch (messageType) {
                     case HELLO:
-                        LOGGER.log(Level.INFO, "Received HELLO from " + peerID);
+                        LOGGER.log(Level.INFO, "Received HELLO from " + peerID + " with id " + pdu.getSessionID());
 
                         boolean isNewEntry;
                         boolean isMyself;
