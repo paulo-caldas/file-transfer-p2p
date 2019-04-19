@@ -251,11 +251,13 @@ class MobileNodeListeningDaemon extends Thread{
                 switch (messageType) {
                     case HELLO:
                         boolean isNewEntry;
+                        boolean isMyself;
 
                         synchronized (keepaliveTable) {
                             isNewEntry = !keepaliveTable.hasPeer(peerID);
                         }
-                        if (isNewEntry) {
+                            isMyself = peerID.equals(representativeNode.getMacAddr());
+                        if (isNewEntry && !isMyself)  {
                             HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
                             ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
 
