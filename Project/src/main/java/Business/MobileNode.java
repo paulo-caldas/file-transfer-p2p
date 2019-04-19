@@ -173,22 +173,22 @@ public class MobileNode {
 
         LOGGER.log(Level.INFO, "Finishing mobile node process");
     }
+
+    public Logger getLogger() {
+        return LOGGER;
+    }
 }
 
 class MobileNodeKeepaliveDaemon extends Thread{
-    private final static Logger LOGGER = Logger.getLogger(MobileNodeKeepaliveDaemon.class.getName());
     private MobileNode representativeNode;
     private PeerKeepaliveTable keepaliveTable;
     private final int KEEPAWAY_TIME_MS = 5000;
+    private Logger LOGGER;
 
     MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
-        try {
-            LOGGER.addHandler(new FileHandler(representativeNode.getMacAddr() + "_MobileNodeKeepaliveDaemon.log"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         this.representativeNode = representativeNode;
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
+        this.LOGGER = representativeNode.getLogger();
     }
 
     void queryPeers() {
@@ -220,21 +220,17 @@ class MobileNodeKeepaliveDaemon extends Thread{
 }
 
 class MobileNodeListeningDaemon extends Thread{
-    private final static Logger LOGGER = Logger.getLogger(MobileNodeListeningDaemon.class.getName());
     private MobileNode representativeNode;
     private ContentRoutingTable routingTable;
     private PeerKeepaliveTable keepaliveTable;
+    private Logger LOGGER;
 
 
     MobileNodeListeningDaemon(MobileNode representativeNode) {
-        try {
-            LOGGER.addHandler(new FileHandler(representativeNode.getMacAddr() + "_MobileNodeListeningDaemon.log"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         this.representativeNode = representativeNode;
         this.routingTable = representativeNode.getContentRoutingTable();
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
+        this.LOGGER = representativeNode.getLogger();
     }
 
     private void listenForPeers() {
