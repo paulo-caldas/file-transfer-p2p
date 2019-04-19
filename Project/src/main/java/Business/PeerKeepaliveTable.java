@@ -37,7 +37,7 @@ public class PeerKeepaliveTable<A,B> {
             }
         }
 
-        return applyStrikeWave();
+        return removedPeers;
     }
 
     public void markAsAlive(B peerId) {
