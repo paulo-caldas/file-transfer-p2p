@@ -147,7 +147,7 @@ public class MobileNode {
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
 
-            LOGGER.log(Level.FINE, "SENT: " + pdu.toString());
+            LOGGER.log(Level.INFO, "SENT: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -249,7 +249,7 @@ class MobileNodeListeningDaemon extends Thread{
 
                 String peerID = pdu.getSrcMAC();
 
-                LOGGER.log(Level.FINE, "Received: " + pdu.toString());
+                LOGGER.log(Level.INFO, "Received: " + pdu.toString());
 
                 switch (messageType) {
                     case HELLO:
