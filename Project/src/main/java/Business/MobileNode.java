@@ -274,6 +274,7 @@ class MobileNodeListeningDaemon extends Thread{
                         representativeNode.sendPongMessage(pdu.getDstMAC(), pdu.getSessionID());
                         break;
                     case PONG:
+                        LOGGER.log(Level.INFO, "Received PONG from " + peerID);
                         String sessionID = pdu.getSessionID();
                         boolean isPingRecent;
                         synchronized (keepaliveTable) {
