@@ -2,13 +2,14 @@ package Business;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry> {
+public class ContentRoutingTable implements Map<String, MobileRoutingTableEntry>, Serializable {
 
     private String ownerID;
     private Map<String, MobileRoutingTableEntry> contentRoutingTable;

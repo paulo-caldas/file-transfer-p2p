@@ -8,7 +8,7 @@ import java.io.Serializable;
 import java.util.List;
 
 
-public class ContentMobileNetworkPDU extends MobileNetworkPDU implements Serializable {
+public class ContentMobileNetworkPDU extends MobileNetworkPDU {
     String contentID;
     List<String> nodePath;
 
