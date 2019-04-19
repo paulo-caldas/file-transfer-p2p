@@ -147,7 +147,7 @@ public class MobileNode {
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
 
-            LOGGER.log(Level.INFO, "SENT: " + pdu.toString());
+            LOGGER.log(Level.FINE, "SENT: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -200,7 +200,6 @@ class MobileNodeKeepaliveDaemon extends Thread{
                     keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
                     keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow));
                 }
-                representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
                 Thread.sleep(KEEPAWAY_TIME_MS);
                 List<String> removedPeers;
                 synchronized (keepaliveTable) {
@@ -254,7 +253,7 @@ class MobileNodeListeningDaemon extends Thread{
 
                 String peerID = pdu.getSrcMAC();
 
-                LOGGER.log(Level.INFO, "Received: " + pdu.toString());
+                LOGGER.log(Level.FINE, "Received: " + pdu.toString());
 
                 switch (messageType) {
                     case HELLO:
