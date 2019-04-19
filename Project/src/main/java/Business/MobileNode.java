@@ -58,7 +58,7 @@ public class MobileNode {
 
 
         try {
-            NetworkInterface eth0 = NetworkInterface.getByName("eth0");
+            NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
             InetAddress group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             Integer port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
 
@@ -66,8 +66,10 @@ public class MobileNode {
 
             LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath().toString());
 
-            this.contentRoutingTable = new ContentRoutingTable(this.macAddr);
-            this.contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
+            contentRoutingTable = new ContentRoutingTable(this.macAddr);
+            contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory);
+
+            peerKeepaliveTable = new PeerKeepaliveTable("n/a", 3);
 
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
