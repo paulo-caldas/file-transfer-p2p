@@ -153,11 +153,6 @@ public class MobileNode {
         }
     }
 
-    public void addPeer(String peerMAC) {
-
-    }
-
-
     public void run() throws InterruptedException {
         LOGGER.log(Level.INFO, "Starting mobile node process");
 
@@ -199,7 +194,9 @@ class MobileNodeKeepaliveDaemon extends Thread{
         try {
             while (true) {
                 timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
-                keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
+                synchronized (keepaliveTable) {
+                    keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
+                }
                 representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
                 Thread.sleep(KEEPAWAY_TIME_MS);
                 List<String> removedPeers = keepaliveTable.applyStrikeWave();
@@ -253,12 +250,20 @@ class MobileNodeListeningDaemon extends Thread{
 
                 switch (messageType) {
                     case HELLO:
-                        if (!keepaliveTable.hasPeer(peerID)) {
+                        boolean isNewEntry;
+
+                        synchronized (keepaliveTable) {
+                            isNewEntry = !keepaliveTable.hasPeer(peerID);
+                        }
+                        if (isNewEntry) {
                             HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
                             ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
 
                             routingTable.mergeWithPeerContentTable(peerContentRoutingTable, pdu.getSrcMAC());
-                            keepaliveTable.markAsAlive(peerID);
+
+                            synchronized (keepaliveTable) {
+                                keepaliveTable.markAsAlive(peerID);
+                            }
                         }
                         break;
                     case PING:
@@ -266,7 +271,9 @@ class MobileNodeListeningDaemon extends Thread{
                         break;
                     case PONG:
                         String sessionID = pdu.getSessionID();
-                        keepaliveTable.markAsAlive(sessionID, peerID);
+                        synchronized (keepaliveTable) {
+                            keepaliveTable.markAsAlive(sessionID, peerID);
+                        }
                         break;
                     case REQUEST_CONTENT:
                         /**
