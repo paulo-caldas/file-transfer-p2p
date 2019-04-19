@@ -4,10 +4,11 @@ import Business.Enum.MobileNetworkMessageType;
 import Business.Enum.MobileNetworkErrorType;
 
 
+import java.io.Serializable;
 import java.util.List;
 
 
-public class ContentMobileNetworkPDU extends MobileNetworkPDU {
+public class ContentMobileNetworkPDU extends MobileNetworkPDU implements Serializable {
     String contentID;
     List<String> nodePath;
 
