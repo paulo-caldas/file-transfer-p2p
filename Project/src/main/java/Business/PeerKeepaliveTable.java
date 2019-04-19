@@ -1,9 +1,6 @@
 package Business;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class PeerKeepaliveTable<A,B> {
     private A currentKeepaliveSessionID;
@@ -22,6 +19,10 @@ public class PeerKeepaliveTable<A,B> {
 
     public boolean hasPeer(B peerId) {
         return peerKeepaliveTable.containsKey(peerId);
+    }
+
+    public Set<B> getPeers() {
+        return peerKeepaliveTable.keySet();
     }
 
     public List<B> applyStrikeWave() {
