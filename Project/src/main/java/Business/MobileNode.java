@@ -2,13 +2,9 @@ package Business;
 
 import java.io.*;
 import java.net.*;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.List;
-import java.util.logging.FileHandler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import Business.Enum.MobileNetworkErrorType;
 import Business.PDU.HelloMobileNetworkPDU;
@@ -16,6 +12,9 @@ import Business.PDU.MobileNetworkPDU;
 
 import Business.Enum.MobileNetworkMessageType;
 import Business.Enum.AddressType;
+import org.apache.log4j.FileAppender;
+import org.apache.log4j.Logger;
+import org.apache.log4j.SimpleLayout;
 
 /*
  *   ContentRoutingTable
@@ -27,8 +26,7 @@ import Business.Enum.AddressType;
  */
 
 public class MobileNode {
-    final static Logger LOGGER = Logger.getLogger(MobileNode.class.getName());
-    File sharingDirectory;
+    final static Logger LOGGER = Logger.getLogger(MobileNode.class);
 
     MulticastSocket receiveServerSocket;
     MulticastSocket sendServerSocket;
@@ -51,35 +49,44 @@ public class MobileNode {
     private Integer currentHelloSessionID;
 
     public MobileNode(File sharingDirectory) throws IOException{
-        this.sharingDirectory = sharingDirectory;
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
             throw new IOException("No such directory");
         }
 
         try {
-            NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
+            // Setting up logger
+            LOGGER.addAppender(new FileAppender(new SimpleLayout(), macAddr + "_MobileNodeLog.xml"));
+
+            LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
+
+            // Setting up needed instance variables
+            NetworkInterface eth0 = NetworkInterface.getByName("eth0");
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
-
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
+            currentHelloSessionID = 0;
 
-            LOGGER.addHandler(new FileHandler(macAddr + "_MobileNodeLog.xml"));
-            LOGGER.log(Level.INFO, "Sharing directory: " + sharingDirectory.getCanonicalPath());
-
+            // Populating content sharing table with all files inside the sharind directory folder passed by argument
             contentRoutingTable = new ContentRoutingTable(this.macAddr);
-            contentRoutingTable.recursivePopulateWithLocalContent(sharingDirectory, LOGGER);
+            List<File> filesInPath = Utils.getFilesInsidePath(sharingDirectory);
+            filesInPath.forEach(( file ->  {
+                LOGGER.info("Indexing file: " + file.getName());
+                try {
+                    contentRoutingTable.addOwnedReference(file);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } ));
 
+            // Setting up the table to help keep count of what peers did not prove they're alive
             peerKeepaliveTable = new PeerKeepaliveTable("n/a", 3);
 
+            // Setting up sockets and packets, needed for UDP communication
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
-
             sendServerSocket = new MulticastSocket(port);
-
             receivePacket = new DatagramPacket(new byte[1024], 1024);
-
-            currentHelloSessionID = 0;
-        } catch (IOException |NoSuchAlgorithmException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -146,14 +153,14 @@ public class MobileNode {
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
 
-            LOGGER.log(Level.FINE, "Sent: " + pdu.toString());
+            LOGGER.debug("Sent: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     public void run() throws InterruptedException {
-        LOGGER.log(Level.INFO, "Starting mobile node process");
+        LOGGER.debug("Starting mobile node process");
 
         // Initialize into the network by announcing everyone your presence
         sendHelloMessage(AddressType.LINK_MULTICAST.toString());
@@ -170,7 +177,7 @@ public class MobileNode {
         listeningDaemon.join();
         queryingDaemon.join();
 
-        LOGGER.log(Level.INFO, "Finishing mobile node process");
+        LOGGER.debug("Finishing mobile node process");
     }
 
     public Logger getLogger() {
@@ -204,7 +211,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
                 synchronized (keepaliveTable) {
                     removedPeers = keepaliveTable.applyStrikeWave();
                 }
-                LOGGER.log(Level.INFO, "Removed peers: " + removedPeers.toString());
+                LOGGER.info("Removed peers: " + removedPeers.toString());
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -233,20 +240,22 @@ class MobileNodeListeningDaemon extends Thread{
     }
 
     private void listenForPeers() {
-        LOGGER.log(Level.INFO, "Listening for peers");
+        LOGGER.debug("Listening for peers");
         try {
             while(true) {
+                // Await for a connection to be made, and parse it as a PDU object
                 representativeNode.receiveServerSocket.receive(representativeNode.receivePacket);
                 byte[] data = representativeNode.receivePacket.getData();
-
                 ByteArrayInputStream in = new ByteArrayInputStream(data);
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
-
                 MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
+
+                // Retrieve important variables that dictate what to do next
                 MobileNetworkMessageType messageType = pdu.getMessageType();
                 String peerID = pdu.getSrcMAC();
                 String destination = pdu.getDstMAC();
 
+                // Only proceed if the message is directed towards me
                 if (amIPartOfDestination(destination)) {
 
                     switch (messageType) {
@@ -254,49 +263,48 @@ class MobileNodeListeningDaemon extends Thread{
                             boolean isNewEntry;
                             boolean isMyself;
 
-                            synchronized (keepaliveTable) {
-                                isNewEntry = !keepaliveTable.hasPeer(peerID);
-                            }
                             isMyself = peerID.equals(representativeNode.getMacAddr());
+                            synchronized (keepaliveTable) { isNewEntry = !keepaliveTable.hasPeer(peerID); }
+
                             if (isNewEntry && !isMyself) {
-                                LOGGER.log(Level.FINE, "Received: " + pdu.toString());
+                                LOGGER.debug("Received: " + pdu.toString());
 
                                 HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
                                 ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
 
-                                routingTable.mergeWithPeerContentTable(peerContentRoutingTable, pdu.getSrcMAC());
-
-                                synchronized (keepaliveTable) {
-                                    keepaliveTable.markAsAlive(peerID);
-                                }
+                                peerContentRoutingTable.values().forEach(
+                                        tableEntry ->
+                                                routingTable.addReference(
+                                                        tableEntry.getFileHash(),
+                                                        tableEntry.getDstMAC(),
+                                                        peerID,
+                                                        1 + tableEntry.getHopCount()));
+                                synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
                             }
                             break;
                         case PING:
-                            LOGGER.log(Level.FINE, "Received: " + pdu.toString());
+                            LOGGER.debug("Received: " + pdu.toString());
+
                             boolean alreadyKnowPeer;
-                            synchronized (keepaliveTable) {
-                                alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
-                            }
+                            synchronized (keepaliveTable) { alreadyKnowPeer = keepaliveTable.hasPeer(peerID); }
+
                             if (alreadyKnowPeer) {
                                 representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
                             } else {
-                                synchronized (keepaliveTable) {
-                                    keepaliveTable.markAsAlive(peerID);
-                                }
+                                synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
                                 representativeNode.sendHelloMessage(pdu.getSrcMAC());
                             }
                             break;
                         case PONG:
-                            LOGGER.log(Level.FINE, "Received: " + pdu.toString());
+                            LOGGER.debug("Received: " + pdu.toString());
+
                             String sessionID = pdu.getSessionID();
                             boolean isPingRecent;
-                            synchronized (keepaliveTable) {
-                                isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
-                            }
+                            synchronized (keepaliveTable) { isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID); }
                             if (isPingRecent) {
-                                LOGGER.log(Level.INFO, "Marked peer " + peerID + " as alive");
+                                LOGGER.debug("Marked peer " + peerID + " as alive");
                             } else {
-                                LOGGER.log(Level.INFO, "Received outdated keepalive from " + peerID);
+                                LOGGER.debug("Received outdated keepalive from " + peerID);
                             }
                             break;
                         case REQUEST_CONTENT:
