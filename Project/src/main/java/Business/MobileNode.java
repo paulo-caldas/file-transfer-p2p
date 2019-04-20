@@ -54,17 +54,17 @@ public class MobileNode {
         }
 
         try {
-            // Setting up logger
-            LOGGER.addAppender(new FileAppender(new SimpleLayout(), macAddr + "_MobileNodeLog.xml"));
-
-            LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
-
             // Setting up needed instance variables
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
             currentHelloSessionID = 0;
+
+            // Setting up logger
+            LOGGER.addAppender(new FileAppender(new SimpleLayout(), macAddr + "_MobileNodeLog.xml"));
+
+            LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
 
             // Populating content sharing table with all files inside the sharind directory folder passed by argument
             contentRoutingTable = new ContentRoutingTable(this.macAddr);
