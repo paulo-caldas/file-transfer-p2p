@@ -21,36 +21,20 @@ public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry
         this.contentRoutingTable = new HashMap<>();
     }
 
-    /**
-     * Add everything in that folder and subfolders
-     *
-     * @param initialPath directory to start from
-     */
-    public void recursivePopulateWithLocalContent(File initialPath, Logger logger) throws IOException, NoSuchAlgorithmException {
-        for (File currPath : initialPath.listFiles()) {
-            if (currPath.isFile()) {
-                String fileHash = Utils.hashFile(currPath, "md5");
-                logger.log(Level.INFO, "Adding to file index: (" + currPath.getName() + "," + fileHash + ")");
-                contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, null, 0));
-            } else {
-                recursivePopulateWithLocalContent(currPath, logger);
-            }
-        }
+    public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
+        String fileHash = Utils.hashFile(file, "md5");
+        contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, null, 0));
     }
 
-    public void mergeWithPeerContentTable(ContentRoutingTable peerRoutingTable, String peerID) {
-
-        for (Map.Entry<String, ContentRoutingTableEntry> tableEntry : peerRoutingTable.entrySet()) {
-            this.put(
-                    tableEntry.getKey(),
-                    new ContentRoutingTableEntry(
-                            tableEntry.getValue().getFileHash(),
-                            tableEntry.getValue().getDstMAC(),
-                            peerID,
-                            1 + tableEntry.getValue().getHopCount()
-                    )
-            );
-        }
+    public void addReference(String fileHash, String destination, String nextHop, Integer hopCount) {
+        contentRoutingTable.put(
+                fileHash,
+                new ContentRoutingTableEntry(
+                        fileHash,
+                        destination,
+                        nextHop,
+                        hopCount
+                ));
     }
 
     @Override
