@@ -5,6 +5,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Utils {
 
@@ -38,5 +40,18 @@ public class Utils {
         }
 
         return sb.toString();
+    }
+
+    public static List<File> getFilesInsidePath(File initialPath) throws IOException, NoSuchAlgorithmException {
+        List<File> files = new ArrayList();
+        for (File currPath : initialPath.listFiles()) {
+            if (currPath.isFile()) {
+                files.add(currPath);
+            } else {
+                files.addAll(getFilesInsidePath(currPath));
+            }
+        }
+
+        return files;
     }
 }
