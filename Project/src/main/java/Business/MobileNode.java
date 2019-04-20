@@ -15,6 +15,7 @@ import Business.Enum.AddressType;
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.Logger;
 import org.apache.log4j.SimpleLayout;
+import org.apache.log4j.xml.DOMConfigurator;
 
 /*
  *   ContentRoutingTable
@@ -62,7 +63,8 @@ public class MobileNode {
             currentHelloSessionID = 0;
 
             // Setting up logger
-            LOGGER.addAppender(new FileAppender(new SimpleLayout(), macAddr + "_MobileNodeLog.xml"));
+            System.setProperty("logfile.name", macAddr + "_MobileNodeLog.xml");
+            DOMConfigurator.configure("log4j.xml");
 
             LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
 
