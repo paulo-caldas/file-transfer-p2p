@@ -1,0 +1,32 @@
+=== Motivacao
+
+= Ubiquidade de informação (publicidade em todo o lado)
+= Publicidade de sucesso advém daquela em que o participante está a ter um bom momento, e por vezes nem se apercebe que se trata de publicidade
+= Sistemas ubiquos com localização permitem que o utilizador interaja com o mundo ao seu redor através de uma representação digital de tal mundo
+= Problemática: Como tornar a tarefa consumo de publicidade e agregação de feedback relativo a este nalgo que os utilizadores estivessem interessados em fazer.
+= Solução: Utilizar componentes de tecnologia ubíqua para criar uma experiência interativa e dinâmica em forma de um jogo que cative e desafie o utilizador, enquanto ao mesmo tempo publicita a este informação da cidade, bem como agregando informação sobre conhecimentos de marcas, que poderá ser utilizada para variadas tarefas de data science.
+
+=== Objetivos
+
+== Criar uma aplicação móvel que questione o utilizador, relativamente a locais de interesse externos, quais aqueles que estão no local onde este está de momento, i.e., aferir o conhecimento que o utilizador tem sobre a cidade onde está.
+
+== Aferir quais os dados estatísticos de maior releve coletar para a tarefa de data science associada à publicidade
+
+== Desenhar a experiência que o utilizador deverá ter, com particular importância em manter este cativado em participar e em fornecer a sua informação.
+
+== Em resumo, desenvolver uma aplicação que possa maximizar o valor que é obtido segundo dois tipos de atores: os utilizadores, que deverão usufruir da aplicação e retirar desta entretenimento e educação; e os publicitários, que podem utilizar a aplicação para publicitar os seus locais e tomar proveito do repositório de dados criado para estudar tendências de interesse de marcar
+
+=== State of the art
+
+== (feito no overleaf, falta adicionar uma referencia)
+
+== Breve resumo do que foi retirado de ler estas referências
+
+=== System specification
+
+== (Edgar e Rui fazem diagramas que acharem relevantes)
+
+=== Evaluation plan
+
+== (Kadu e Leandro especificam modo de avaliação concretos , entrevistas a jogadores e a publicitários sobre isto ser bom ou não, utilizar data sets falsos)
+
