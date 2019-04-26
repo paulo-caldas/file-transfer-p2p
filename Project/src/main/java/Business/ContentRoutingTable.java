@@ -13,17 +13,19 @@ import java.util.logging.Logger;
 
 public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry>, Serializable {
 
+    private long currentTableVersion;
     private String ownerID;
     private Map<String, ContentRoutingTableEntry> contentRoutingTable;
 
     public ContentRoutingTable(String ownerID) {
+        this.currentTableVersion = System.currentTimeMillis();
         this.ownerID = ownerID;
         this.contentRoutingTable = new HashMap<>();
     }
 
     public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
         String fileHash = Utils.hashFile(file, "md5");
-        contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, null, 0));
+        contentRoutingTable.put(fileHash, new ContentRoutingTableEntry(fileHash, ownerID, "self", 0, currentTableVersion));
     }
 
     public void addReference(String fileHash, String destination, String nextHop, Integer hopCount) {
@@ -33,8 +35,21 @@ public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry
                         fileHash,
                         destination,
                         nextHop,
-                        hopCount
+                        hopCount,
+                        currentTableVersion
                 ));
+    }
+
+    public void setVersion(long version) {
+        this.currentTableVersion = version;
+    }
+
+    public void incVersion() {
+        this.currentTableVersion++;
+    }
+
+    public long getCurrentTableVersion() {
+        return currentTableVersion;
     }
 
     @Override
@@ -96,6 +111,15 @@ public class ContentRoutingTable implements Map<String, ContentRoutingTableEntry
     public Set<Entry<String, ContentRoutingTableEntry>> entrySet() {
         return contentRoutingTable.entrySet();
     }
+
+    public Long getMostRecentEntryVersionOfPeer(String peerID) {
+        return contentRoutingTable.values()
+                                  .stream() .filter(
+                                          v -> v.getNextHopMAC().equals(peerID))
+                                  .map(ContentRoutingTableEntry::getVersion)
+                                  .max(Long::compareTo)
+                                  .orElse(-1L);
+    }
 }
 
 class ContentRoutingTableEntry implements Serializable {
@@ -103,12 +127,14 @@ class ContentRoutingTableEntry implements Serializable {
     private String dstMAC;
     private String nextHopMAC;
     private int hopCount;
+    private long versionOfEntry;
 
-    public ContentRoutingTableEntry(String fileHash, String dstMAC, String nextHopMAC, int hopCount) {
+    public ContentRoutingTableEntry(String fileHash, String dstMAC, String nextHopMAC, int hopCount, long versionOfEntry) {
         this.fileHash = fileHash;
         this.dstMAC = dstMAC;
         this.nextHopMAC = nextHopMAC;
         this.hopCount = hopCount;
+        this.versionOfEntry = versionOfEntry;
     }
 
     public String getFileHash() {
@@ -141,5 +167,13 @@ class ContentRoutingTableEntry implements Serializable {
 
     public void setHopCount(int hopCount) {
         this.hopCount = hopCount;
+    }
+
+    public long getVersion() {
+        return this.versionOfEntry;
+    }
+
+    public void setVersion(long version) {
+        this.versionOfEntry = version;
     }
 }
