@@ -12,9 +12,7 @@ import Business.PDU.MobileNetworkPDU;
 
 import Business.Enum.MobileNetworkMessageType;
 import Business.Enum.AddressType;
-import org.apache.log4j.FileAppender;
 import org.apache.log4j.Logger;
-import org.apache.log4j.SimpleLayout;
 import org.apache.log4j.xml.DOMConfigurator;
 
 /*
@@ -191,6 +189,7 @@ class MobileNodeKeepaliveDaemon extends Thread{
     private MobileNode representativeNode;
     private PeerKeepaliveTable keepaliveTable;
     private final int KEEPAWAY_TIME_MS = 5000;
+    private final int HELLO_FLOODING_PERIODICITY = 3; // every 3 KEEPARAY_TIME_MS, flood with HELLO
     private Logger LOGGER;
 
     MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
@@ -199,46 +198,72 @@ class MobileNodeKeepaliveDaemon extends Thread{
         this.LOGGER = representativeNode.getLogger();
     }
 
+    @Override
+    public void run () {
+        System.out.println("- Starting keepalive daemon");
+        queryPeers();
+    }
+
     void queryPeers() {
+
+        int period = 0;
 
         try {
             while (true) {
-                String timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
-                synchronized (keepaliveTable) {
-                    keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
-                    keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow));
-                }
+                pingAllPeers();
                 Thread.sleep(KEEPAWAY_TIME_MS);
-                List<String> removedPeers;
-                synchronized (keepaliveTable) {
-                    removedPeers = keepaliveTable.applyStrikeWave();
+                removeDeadPeers();
+
+                if (period++ == HELLO_FLOODING_PERIODICITY) {
+                    sendHelloFlood();
+                    period = 0;
                 }
-                LOGGER.info("Removed peers: " + removedPeers.toString());
+
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
 
-    @Override
-    public void run () {
-        System.out.println("- Starting keepalive daemon");
-        queryPeers();
+    private void pingAllPeers() {
+        String timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
+        synchronized (keepaliveTable) {
+            keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
+            keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow));
+        }
+    }
+
+    private void removeDeadPeers() {
+        List<String> removedPeers;
+        synchronized (keepaliveTable) {
+            removedPeers = keepaliveTable.applyStrikeWave();
+        }
+        LOGGER.info("Removed peers: " + removedPeers.toString());
+    }
+
+    private void sendHelloFlood() {
+        representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
     }
 }
 
 class MobileNodeListeningDaemon extends Thread{
     private MobileNode representativeNode;
-    private ContentRoutingTable routingTable;
+    private ContentRoutingTable contentRoutingTable;
     private PeerKeepaliveTable keepaliveTable;
     private Logger LOGGER;
 
 
     MobileNodeListeningDaemon(MobileNode representativeNode) {
         this.representativeNode = representativeNode;
-        this.routingTable = representativeNode.getContentRoutingTable();
+        this.contentRoutingTable = representativeNode.getContentRoutingTable();
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
         this.LOGGER = representativeNode.getLogger();
+    }
+
+    @Override
+    public void run() {
+        System.out.println("- Starting listening daemon");
+        listenForPeers();
     }
 
     private void listenForPeers() {
@@ -253,61 +278,23 @@ class MobileNodeListeningDaemon extends Thread{
                 MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
 
                 // Retrieve important variables that dictate what to do next
-                MobileNetworkMessageType messageType = pdu.getMessageType();
-                String peerID = pdu.getSrcMAC();
+                String source = pdu.getSrcMAC();
                 String destination = pdu.getDstMAC();
 
                 // Only proceed if the message is directed towards me
-                if (amIPartOfDestination(destination)) {
+                if (amIPartOfDestination(source, destination)) {
+
+                    MobileNetworkMessageType messageType = pdu.getMessageType();
 
                     switch (messageType) {
                         case HELLO:
-                            boolean isNewEntry;
-                            boolean isMyself;
-
-                            isMyself = peerID.equals(representativeNode.getMacAddr());
-                            synchronized (keepaliveTable) { isNewEntry = !keepaliveTable.hasPeer(peerID); }
-
-                            if (isNewEntry && !isMyself) {
-                                LOGGER.debug("Received: " + pdu.toString());
-
-                                HelloMobileNetworkPDU helloPDU = (HelloMobileNetworkPDU) pdu;
-                                ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
-
-                                peerContentRoutingTable.values().forEach(
-                                        tableEntry ->
-                                                routingTable.addReference(
-                                                        tableEntry.getFileHash(),
-                                                        tableEntry.getDstMAC(),
-                                                        peerID,
-                                                        1 + tableEntry.getHopCount()));
-                                synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
-                            }
+                            processHelloPacket((HelloMobileNetworkPDU) pdu);
                             break;
                         case PING:
-                            LOGGER.debug("Received: " + pdu.toString());
-
-                            boolean alreadyKnowPeer;
-                            synchronized (keepaliveTable) { alreadyKnowPeer = keepaliveTable.hasPeer(peerID); }
-
-                            if (alreadyKnowPeer) {
-                                representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
-                            } else {
-                                synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
-                                representativeNode.sendHelloMessage(pdu.getSrcMAC());
-                            }
+                            processPingPacket(pdu);
                             break;
                         case PONG:
-                            LOGGER.debug("Received: " + pdu.toString());
-
-                            String sessionID = pdu.getSessionID();
-                            boolean isPingRecent;
-                            synchronized (keepaliveTable) { isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID); }
-                            if (isPingRecent) {
-                                LOGGER.debug("Marked peer " + peerID + " as alive");
-                            } else {
-                                LOGGER.debug("Received outdated keepalive from " + peerID);
-                            }
+                            processPongPacket(pdu);
                             break;
                         case REQUEST_CONTENT:
                             /**
@@ -347,22 +334,84 @@ class MobileNodeListeningDaemon extends Thread{
                     }
                 }
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
+        } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    private boolean amIPartOfDestination(String destination) {
-        return (destination.equals(representativeNode.getMacAddr())
-                || destination.equals(AddressType.LINK_BROADCAST.toString())
-                || destination.equals(AddressType.LINK_MULTICAST.toString()));
+    private void processHelloPacket(HelloMobileNetworkPDU helloPDU) {
+        ContentRoutingTable peerContentRoutingTable = helloPDU.getContentRoutingTable();
+        String peerID = helloPDU.getSrcMAC();
+
+        boolean isNewPeer;
+        boolean isMyself;
+        boolean isUpdatedTable;
+
+        isMyself = peerID.equals(representativeNode.getMacAddr());
+        synchronized (keepaliveTable) { isNewPeer = !keepaliveTable.hasPeer(peerID); }
+        isUpdatedTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID) < peerContentRoutingTable.getCurrentTableVersion();
+
+        if (!isMyself && (isNewPeer || isUpdatedTable)) {
+            LOGGER.debug("Received: " + helloPDU.toString());
+
+            peerContentRoutingTable.incVersion();
+            peerContentRoutingTable.values().forEach(
+                    tableEntry ->
+                            contentRoutingTable.addReference(
+                                    tableEntry.getFileHash(),
+                                    tableEntry.getDstMAC(),
+                                    peerID,
+                                    1 + tableEntry.getHopCount()));
+            synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
+
+            // New changes were made, send them out
+            representativeNode.sendHelloMessage(AddressType.LINK_MULTICAST.toString());
+        }
     }
 
-    @Override
-    public void run() {
-        System.out.println("- Starting listening daemon");
-        listenForPeers();
+    private void processPingPacket(MobileNetworkPDU pdu) {
+        LOGGER.debug("Received: " + pdu.toString());
+
+        String peerID = pdu.getSrcMAC();
+        boolean alreadyKnowPeer;
+
+        synchronized (keepaliveTable) { alreadyKnowPeer = keepaliveTable.hasPeer(peerID); }
+
+        if (alreadyKnowPeer) {
+            representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
+        } else {
+            synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
+            representativeNode.sendHelloMessage(pdu.getSrcMAC());
+        }
+    }
+
+    private void processPongPacket(MobileNetworkPDU pdu) {
+        LOGGER.debug("Received: " + pdu.toString());
+
+        String peerID = pdu.getSrcMAC();
+        String sessionID = pdu.getSessionID();
+        boolean isPingRecent;
+
+        synchronized (keepaliveTable) { isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID); }
+        if (isPingRecent) {
+            LOGGER.debug("Marked peer " + peerID + " as alive");
+        } else {
+            LOGGER.debug("Received outdated keepalive from " + peerID);
+        }
+    }
+
+    private boolean amIPartOfDestination(String source, String destination) {
+        String myMacAddr = representativeNode.getMacAddr();
+
+        // Ignore messages the node created itself
+        if (source.equals(myMacAddr)) {
+            return false;
+        }
+
+        // Accept being part of destination if one of the following happens:
+
+        return ( destination.equals(myMacAddr)                                // I am explicitly the destination
+              || destination.equals(AddressType.LINK_BROADCAST.toString())    // It is a broadcast message
+              || destination.equals(AddressType.LINK_MULTICAST.toString()));  // It is a subscribed multicast message
     }
 }
