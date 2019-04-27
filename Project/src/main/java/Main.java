@@ -1,4 +1,4 @@
-package Business;
+import Business.MobileNetworkNode.MobileNode;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,8 +14,9 @@ public class Main {
         System.out.println("- Starting main");
 
         try {
-            new MobileNode(sharingDirectory).run();
-        } catch (InterruptedException | IOException e) {
+            MobileNode node = new MobileNode(sharingDirectory);
+            node.autonamousStart();
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }

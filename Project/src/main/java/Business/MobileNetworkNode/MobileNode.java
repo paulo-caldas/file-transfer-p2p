@@ -1,24 +1,24 @@
-package Business;
+package Business.MobileNetworkNode;
 
 import java.io.*;
 import java.net.*;
 import java.util.List;
 import java.util.Scanner;
 
-import Business.MobileNetworkNode.ContentRoutingTable;
 import Business.MobileNetworkNode.Daemon.MobileNodeKeepaliveDaemon;
 import Business.MobileNetworkNode.Daemon.MobileNodeListeningDaemon;
-import Business.MobileNetworkNode.PeerKeepaliveTable;
+import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
 import Business.PDU.HelloMobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU;
 
+import Business.Utils;
 import View.MainView;
 import View.Utilities.Menu;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
 
 /*
- *   ContentRoutingTable
+ *   RoutingTable
  *
  *   | Content-ID | Node-IDs  | Next hop
  *   | 123        | 999       |  123
@@ -27,6 +27,7 @@ import org.apache.log4j.xml.DOMConfigurator;
  */
 
 public class MobileNode {
+
     public enum AddressType {
         LINK_BROADCAST("FF:FF:FF:FF:FF:FF"),
         LINK_MULTICAST("FF:FF:FF:FF:FF:FF"),
@@ -51,25 +52,32 @@ public class MobileNode {
 
     final static Logger LOGGER = Logger.getLogger(MobileNode.class);
 
-    MulticastSocket receiveServerSocket;
-    MulticastSocket sendServerSocket;
+    private MulticastSocket receiveServerSocket;
+    private MulticastSocket sendServerSocket;
 
-    DatagramPacket receivePacket;
-    DatagramPacket sendPacket;
+    private DatagramPacket receivePacket;
+    private DatagramPacket sendPacket;
 
-    ByteArrayOutputStream outputStream;
-    ObjectOutputStream os;
+    private ByteArrayOutputStream outputStream;
+    private ObjectOutputStream os;
 
-    byte[] buffer;
+    private byte[] buffer;
 
     private String macAddr;
-    InetAddress group;
-    Integer port;
+    private InetAddress group;
+    private Integer port;
 
-    private ContentRoutingTable contentRoutingTable;
+    private RoutingTable contentRoutingTable;
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     private Integer currentHelloSessionID;
+
+    public Logger getLogger() { return LOGGER; }
+    public String getMacAddr() { return macAddr; }
+    public RoutingTable getRoutingTable() { return contentRoutingTable; }
+    public PeerKeepaliveTable getPeerKeepaliveTable() { return peerKeepaliveTable; }
+    public MulticastSocket getReceiveServerSocket() { return this.receiveServerSocket; }
+    public DatagramPacket getReceivePacket() { return this.receivePacket; }
 
     public MobileNode(File sharingDirectory) throws IOException{
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
@@ -91,7 +99,7 @@ public class MobileNode {
             LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
 
             // Populating content sharing table with all files inside the sharind directory folder passed by argument
-            contentRoutingTable = new ContentRoutingTable(this.macAddr);
+            contentRoutingTable = new RoutingTable(this.macAddr);
             List<File> filesInPath = Utils.getFilesInsidePath(sharingDirectory);
             filesInPath.forEach(( file ->  {
                 LOGGER.info("Indexing file: " + file.getName());
@@ -160,20 +168,6 @@ public class MobileNode {
         // TODO
 
         System.out.println("Download interaction here");
-    }
-
-    Logger getLogger() { return LOGGER; }
-
-    String getMacAddr() {
-        return macAddr;
-    }
-
-    ContentRoutingTable getContentRoutingTable() {
-        return contentRoutingTable;
-    }
-
-    PeerKeepaliveTable getPeerKeepaliveTable() {
-        return peerKeepaliveTable;
     }
 
     public void sendHelloMessage(String dstMac) {

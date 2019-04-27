@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Utils {
@@ -54,4 +55,9 @@ public class Utils {
 
         return files;
     }
+
+    public static String repeatStringN(String str, int n) {
+        return String.join("", Collections.nCopies(n, str));
+    }
+
 }

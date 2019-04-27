@@ -1,19 +1,16 @@
 package Business.PDU;
 
-import Business.ContentRoutingTable;
-import Business.Enum.MobileNetworkMessageType;
-import Business.Enum.MobileNetworkErrorType;
+import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
 
 public class HelloMobileNetworkPDU extends MobileNetworkPDU {
-    private ContentRoutingTable contentRoutingTable;
+    private RoutingTable contentRoutingTable;
 
-    public HelloMobileNetworkPDU(String srcMAC, String dstMAC, MobileNetworkMessageType messageType, MobileNetworkErrorType errorCode, int TTL, String sessionID, ContentRoutingTable contentRoutingTable) {
+    public HelloMobileNetworkPDU(String srcMAC, String dstMAC, MobileNetworkMessageType messageType, MobileNetworkErrorType errorCode, int TTL, String sessionID, RoutingTable contentRoutingTable) {
         super(srcMAC, dstMAC, messageType, errorCode, TTL, sessionID);
         this.contentRoutingTable = contentRoutingTable;
     }
 
-    public ContentRoutingTable getContentRoutingTable() {
+    public RoutingTable getRoutingTable() {
         return contentRoutingTable;
     }
-
 }

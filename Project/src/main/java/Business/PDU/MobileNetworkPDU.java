@@ -1,10 +1,16 @@
 package Business.PDU;
 
-import Business.Enum.*;
-
 import java.io.Serializable;
 
 public class MobileNetworkPDU implements Serializable {
+
+    public enum MobileNetworkErrorType {
+        VALID;
+    }
+
+    public enum MobileNetworkMessageType {
+        PING, PONG, HELLO, REQUEST_CONTENT, REPLY_CONTENT;
+    }
 
     private String srcMAC;
     private String dstMAC;

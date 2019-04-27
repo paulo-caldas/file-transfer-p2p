@@ -1,4 +1,4 @@
-package Business.MobileNode;
+package Business.MobileNetworkNode;
 
 import java.util.*;
 
