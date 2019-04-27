@@ -86,7 +86,8 @@ public class MobileNode {
 
         try {
             // Setting up needed instance variables
-            NetworkInterface eth0 = NetworkInterface.getByName("eth0");
+            //NetworkInterface eth0 = NetworkInterface.getByName("eth0");
+            NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
@@ -148,7 +149,7 @@ public class MobileNode {
         LOGGER.debug("Finishing mobile node process");
     }
 
-    void mainUserInteraction() {
+    private void mainUserInteraction() {
         Menu menu = new MainView().getMenu();
         String opcao;
         do {
@@ -164,7 +165,7 @@ public class MobileNode {
         while(!opcao.equals("E"));
     }
 
-    void downloadInteraction() {
+    private void downloadInteraction() {
         // TODO
 
         System.out.println("Download interaction here");

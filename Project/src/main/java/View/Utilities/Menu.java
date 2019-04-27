@@ -13,6 +13,15 @@ public class Menu {
     private String title;
     private int horizontalSize;
 
+    /**
+     * Take padding into account when drawing header because every
+     * menu element is separated by a space on each size
+     * if you dont, header and body of menu wont allign
+     * [space]text[space]....[space]tag[space]
+     * Thus, the padding on each half of the screen is two
+     */
+    private final int PADDING_SIZE = 4;
+
     public Menu(String title, List<Option> options) {
         this.options = options;
         this.title = title;
@@ -46,9 +55,37 @@ public class Menu {
     }
 
     public void show() {
-        clearConsole();
-        buildHeader();
+        /**
+         * Consider the following menu
+         *
+         * +==================+  (H1)
+         * |     TITLE        |  (H2)
+         * +==================+  (H3)
+         * | Opt1 ......... 1 |  (O1)
+         * | Opt2 ......... 2 |  (O2)
+         * | Opt3 ......... 3 |  (O3)
+         * |      (...)       |  (ON-1)
+         * +==================+  (ON)
+         */
 
+        clearConsole();
+        buildHeader(); // (H1), (H2), (H3)
+        buildOptions(); // from (O1) to (ON)
+        System.out.print("Insert option:");
+    }
+
+    private void buildOptions() {
+        /**
+         * Consider the following body
+         *
+         * | Opt1 ......... 1 | (1)
+         * | Opt2 ......... 2 | (2)
+         * | Opt3 ......... 3 | (3)
+         * |      (...)       | (N-1)
+         * +==================+ (N)
+         */
+
+        // from (1) to (N-1)
         for (Option o : options) {
             String tag = o.getTag();
             String description = o.getDescription();
@@ -58,17 +95,36 @@ public class Menu {
 
             System.out.println("| " + description + " " + repeatStringN(".", horizontalSize-descriptionLen-tagLen) + " " + tag + " |");
         }
-        System.out.println("+" + repeatStringN("=", horizontalSize) + "+");
-        System.out.print("Insert option:");
+
+        drawLine(); // (N)
     }
 
     private void buildHeader() {
         int titleLen = title.length();
 
-        System.out.println("+" + repeatStringN("=", horizontalSize) + "+");
+        /**
+         * Consider the following header
+         *
+         * +================+  (1)
+         * |     TITLE      |  (2)
+         * +================+  (3)
+         */
 
-        System.out.println("|" + repeatStringN(" ", (horizontalSize-titleLen)/2) + title + repeatStringN(" ", (horizontalSize-((horizontalSize-titleLen)/2)-titleLen)) + "|");
+        // (1)
+        drawLine();
 
-        System.out.println("+" + repeatStringN("=", horizontalSize) + "+");
+        // (2)
+        System.out.println("|" + repeatStringN(" ", ((horizontalSize-titleLen)/2) + (PADDING_SIZE/2)) + title + repeatStringN(" ", (horizontalSize-((horizontalSize-titleLen)/2)-titleLen) + (PADDING_SIZE/2)) + "|");
+
+        // (3)
+        drawLine();
+    }
+
+    private void drawLine() {
+        /**
+         * +===========+
+         */
+
+        System.out.println("+" + repeatStringN("=", horizontalSize + PADDING_SIZE) + "+");
     }
 }

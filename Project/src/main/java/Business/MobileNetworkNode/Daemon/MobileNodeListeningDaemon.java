@@ -46,19 +46,20 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
     @Override
     public void finish() {
         finished = true;
+        receiveServerSocket.close();
     }
 
     private void listenForPeers() {
         LOGGER.debug("Listening for peers");
-        try {
-            while(!finished) {
-                // Await for a connection to be made, and parse it as a PDU object
+        while(!finished) {
+            // Await for a connection to be made, and parse it as a PDU object
+            try {
                 receiveServerSocket.receive(receivePacket);
                 byte[] data = receivePacket.getData();
                 ByteArrayInputStream in = new ByteArrayInputStream(data);
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
-                MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
-
+                MobileNetworkPDU pdu = null;
+                pdu = (MobileNetworkPDU) objectInputStream.readObject();
                 // Retrieve important variables that dictate what to do next
                 String source = pdu.getSrcMAC();
                 String destination = pdu.getDstMAC();
@@ -115,9 +116,12 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                             break;
                     }
                 }
+            } catch (ClassNotFoundException e) {
+                LOGGER.error("Class not found");
+                e.printStackTrace();
+            } catch (IOException e) {
+                LOGGER.error("IO Exception whilst receiving message");
             }
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
         }
     }
 
