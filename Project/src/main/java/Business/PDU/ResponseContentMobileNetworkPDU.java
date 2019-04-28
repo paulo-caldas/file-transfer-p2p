@@ -1,7 +1,5 @@
 package Business.PDU;
 
-import Business.Enum.*;
-
 public class ResponseContentMobileNetworkPDU extends ContentMobileNetworkPDU {
 
     // Data data;

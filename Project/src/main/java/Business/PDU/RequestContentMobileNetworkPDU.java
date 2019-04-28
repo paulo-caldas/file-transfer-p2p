@@ -1,7 +1,5 @@
 package Business.PDU;
 
-import Business.Enum.*;
-
 public class RequestContentMobileNetworkPDU extends ContentMobileNetworkPDU {
     public RequestContentMobileNetworkPDU(String srcMAC, String dstMAC, MobileNetworkMessageType messageType, MobileNetworkErrorType errorCode, int TTL, String sessionID, String contentID) {
         super(srcMAC, dstMAC, messageType, errorCode, TTL, sessionID, contentID);

@@ -55,4 +55,17 @@ public class PeerKeepaliveTable<A,B> {
         return false;
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("max_strikes: " + MAX_STRIKES + "\n");
+        sb.append("current_session_id: " + currentKeepaliveSessionID + "\n\n");
+        peerKeepaliveTable.entrySet().forEach(
+                set -> sb.append(set.getKey() + " -> " + set.getValue() + "\n")
+        );
+        sb.append("\n");
+        sb.append("}");
+        return peerKeepaliveTable.toString();
+    }
 }

@@ -17,15 +17,6 @@ import View.Utilities.Menu;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
 
-/*
- *   RoutingTable
- *
- *   | Content-ID | Node-IDs  | Next hop
- *   | 123        | 999       |  123
- *   | 789        | 777       |  543
- *
- */
-
 public class MobileNode {
 
     public enum AddressType {
@@ -71,6 +62,8 @@ public class MobileNode {
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
 
     private Integer currentHelloSessionID;
+
+    private Scanner scanner;
 
     public Logger getLogger() { return LOGGER; }
     public String getMacAddr() { return macAddr; }
@@ -119,6 +112,8 @@ public class MobileNode {
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
             sendServerSocket = new MulticastSocket(port);
             receivePacket = new DatagramPacket(new byte[1024], 1024);
+
+            scanner = new Scanner(System.in);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -135,18 +130,28 @@ public class MobileNode {
         // Periodically query peers if they're alive
         MobileNodeKeepaliveDaemon mobileNodeKeepaliveDaemon = new MobileNodeKeepaliveDaemon(this);
 
-        Thread listeningDaemonThread = new Thread(mobileNodeListeningDaemon);
-        Thread queryingDaemonThread = new Thread(mobileNodeKeepaliveDaemon);
+        // Start the threads
+        Thread mobileNodeListeningDaemonThread = new Thread(mobileNodeListeningDaemon);
+        Thread mobileNodeKeepAliveDaemonThread = new Thread(mobileNodeKeepaliveDaemon);
 
-        listeningDaemonThread.start();
-        queryingDaemonThread.start();
+        mobileNodeListeningDaemonThread.start();
+        mobileNodeKeepAliveDaemonThread.start();
 
+        // Start the user interaction flow, where menus are shown and input is read
         mainUserInteraction();
 
+        // If the interaction flow ended, the entire program can end
+        // Signal the daemons to gracefully end and clean up
         mobileNodeKeepaliveDaemon.finish();
         mobileNodeListeningDaemon.finish();
 
-        LOGGER.debug("Finishing mobile node process");
+        // Wait for threads to be finished
+        mobileNodeListeningDaemonThread.join();
+        mobileNodeKeepAliveDaemonThread.join();
+
+        logNodeInfo();
+
+        LOGGER.debug("Finished mobile node process");
     }
 
     private void mainUserInteraction() {
@@ -157,8 +162,9 @@ public class MobileNode {
             opcao = new Scanner(System.in).nextLine().toUpperCase();
             switch(opcao) {
                 case "D" : downloadInteraction();
-                    break;
-                case "E": break;
+                           break;
+                case "E": System.out.println("Leaving...");
+                          break;
                 default: break;
             }
         }
@@ -166,9 +172,9 @@ public class MobileNode {
     }
 
     private void downloadInteraction() {
-        // TODO
-
-        System.out.println("Download interaction here");
+        System.out.println("Type keywords related to the content you're looking for (separated by spaces): ");
+        String input = scanner.nextLine();
+        String[] spaceSeparatedParams = input.split(" ");
     }
 
     public void sendHelloMessage(String dstMac) {
@@ -225,4 +231,12 @@ public class MobileNode {
             e.printStackTrace();
         }
     }
+
+    private void logNodeInfo() {
+        LOGGER.debug("Mac address: " + macAddr);
+        LOGGER.debug("Routing table\n:" + contentRoutingTable.toString());
+        LOGGER.debug("Peer Keepalive table\n: " + peerKeepaliveTable.toString());
+        LOGGER.debug("Hello session id: " + currentHelloSessionID);
+    }
+
 }

@@ -3,27 +3,27 @@ package Business.MobileNetworkNode.RoutingInfo;
 import java.io.Serializable;
 
 public class RoutingTableEntry implements Serializable {
-    private String fileHash;
+    public enum EntryTypes {
+        NULL_ENTRY;
+    }
+
+    private String fileName;
     private String dstMAC;
     private String nextHopMAC;
     private int hopCount;
     private long versionOfEntry;
 
-    public RoutingTableEntry(String fileHash, String dstMAC, String nextHopMAC, int hopCount, long versionOfEntry) {
-        this.fileHash = fileHash;
+    public RoutingTableEntry(String fileName, String dstMAC, String nextHopMAC, int hopCount, long versionOfEntry) {
+        this.fileName = fileName;
         this.dstMAC = dstMAC;
         this.nextHopMAC = nextHopMAC;
         this.hopCount = hopCount;
         this.versionOfEntry = versionOfEntry;
     }
 
-    public String getFileHash() {
-        return fileHash;
-    }
+    public String getFileName() { return fileName; }
 
-    public void setFileHash(String fileHash) {
-        this.fileHash = fileHash;
-    }
+    public void setFileName(String fileName) { this.fileName = fileName; }
 
     public String getDstMAC() {
         return dstMAC;
@@ -55,6 +55,11 @@ public class RoutingTableEntry implements Serializable {
 
     public void setVersion(long version) {
         this.versionOfEntry = version;
+    }
+
+    @Override
+    public String toString() {
+        return "(" + fileName + "," + dstMAC + "," + nextHopMAC + "," + hopCount + "," + versionOfEntry + ")";
     }
 }
 

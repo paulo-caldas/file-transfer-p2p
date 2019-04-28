@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.DatagramPacket;
 import java.net.MulticastSocket;
+import java.net.SocketException;
 
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_MULTICAST;
@@ -119,8 +120,11 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             } catch (ClassNotFoundException e) {
                 LOGGER.error("Class not found");
                 e.printStackTrace();
+            } catch (SocketException e) {
+                // Reached here when the receive socket is closed, to finish the daemon
+                // Do nothing, let loop end gracefully
             } catch (IOException e) {
-                LOGGER.error("IO Exception whilst receiving message");
+                e.printStackTrace();
             }
         }
     }
@@ -141,13 +145,14 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             LOGGER.debug("Received: " + helloPDU.toString());
 
             peerRoutingTable.incVersion();
-            peerRoutingTable.values().forEach(
-                    tableEntry ->
+            peerRoutingTable.entrySet().forEach(
+                    entry ->
                             contentRoutingTable.addReference(
-                                    tableEntry.getFileHash(),
-                                    tableEntry.getDstMAC(),
+                                    entry.getKey(),
+                                    entry.getValue().getFileName(),
+                                    entry.getValue().getDstMAC(),
                                     peerID,
-                                    1 + tableEntry.getHopCount()));
+                                    1 + entry.getValue().getHopCount()));
             synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
 
             // New changes were made, send them out

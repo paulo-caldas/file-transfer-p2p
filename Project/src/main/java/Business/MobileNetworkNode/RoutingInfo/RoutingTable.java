@@ -11,11 +11,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry.EntryTypes.NULL_ENTRY;
+
 public class RoutingTable implements Map<String, RoutingTableEntry>, Serializable {
 
     private long currentTableVersion;
     private String ownerID;
-    private Map<String, RoutingTableEntry> contentRoutingTable;
+    private Map<String, RoutingTableEntry> contentRoutingTable; // Key is file hash
 
     public RoutingTable(String ownerID) {
         this.currentTableVersion = System.currentTimeMillis();
@@ -25,14 +27,19 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
 
     public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
         String fileHash = Utils.hashFile(file, "md5");
-        contentRoutingTable.put(fileHash, new RoutingTableEntry(fileHash, ownerID, "self", 0, currentTableVersion));
+        contentRoutingTable.put(fileHash,
+                new RoutingTableEntry(file.getName(),
+                        ownerID,
+                        NULL_ENTRY.toString(),
+                        0,
+                        currentTableVersion));
     }
 
-    public void addReference(String fileHash, String destination, String nextHop, Integer hopCount) {
+    public void addReference(String fileHash, String fileName, String destination, String nextHop, Integer hopCount) {
         contentRoutingTable.put(
                 fileHash,
                 new RoutingTableEntry(
-                        fileHash,
+                        fileName,
                         destination,
                         nextHop,
                         hopCount,
@@ -119,5 +126,18 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                 .map(RoutingTableEntry::getVersion)
                 .max(Long::compareTo)
                 .orElse(-1L);
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("owner: " + ownerID + ",\n\n");
+        contentRoutingTable.entrySet().forEach(
+                set -> sb.append(set.getKey() + " -> " + set.getValue().toString() + "\n")
+        );
+        sb.append("\n");
+        sb.append("}");
+
+        return sb.toString();
     }
 }
