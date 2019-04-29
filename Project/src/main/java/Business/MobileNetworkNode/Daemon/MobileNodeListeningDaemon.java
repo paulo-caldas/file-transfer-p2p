@@ -6,6 +6,8 @@ import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
 import Business.PDU.HelloMobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU.MobileNetworkMessageType;
+import Business.PDU.RequestContentMobileNetworkPDU;
+import Business.PDU.ResponseContentMobileNetworkPDU;
 import org.apache.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
@@ -18,14 +20,18 @@ import java.net.SocketException;
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_MULTICAST;
 
+/**
+ * Daemon responsible for, in behalf of the mobile node, listen for incoming messages
+ * and reply appropriately
+ */
 public class MobileNodeListeningDaemon implements MobileNodeDaemon {
     private boolean finished;
-    private MobileNode representativeNode;
-    private RoutingTable contentRoutingTable;
-    private PeerKeepaliveTable keepaliveTable;
-    private MulticastSocket receiveServerSocket;
+    private final MobileNode representativeNode;
+    private final RoutingTable contentRoutingTable;
+    private final PeerKeepaliveTable keepaliveTable;
+    private final MulticastSocket receiveServerSocket;
     private DatagramPacket receivePacket;
-    private Logger LOGGER;
+    private final Logger LOGGER;
 
 
     public MobileNodeListeningDaemon(MobileNode representativeNode) {
@@ -66,7 +72,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                 String destination = pdu.getDstMAC();
 
                 // Only proceed if the message is directed towards me
-                if (amIPartOfDestination(source, destination)) {
+                if (isNodePartOfLinkDestination(source, destination)) {
 
                     MobileNetworkMessageType messageType = pdu.getMessageType();
 
@@ -81,36 +87,10 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                             processPongPacket(pdu);
                             break;
                         case REQUEST_CONTENT:
-                            /**
-                             * TODO
-                             * if multicast_message
-                             *     if have content
-                             *         send reply_content
-                             *     else
-                             *         push_path
-                             *         propagate_message
-                             * else if direct_message
-                             *     next_hop = check_routing_table
-                             *          if this == next_hop
-                             *              send reply_content
-                             *          if neighbour == next_hop
-                             *              push_path
-                             *              propagate_message
-                             *          else
-                             *              drop
-                             */
+                            processRequestContentPacket((RequestContentMobileNetworkPDU) pdu);
                             break;
-                        case REPLY_CONTENT:
-                            /**
-                             * TODO:
-                             * next_hop = pop_router_path_and_validate
-                             *     if not this == next_hop
-                             *         abort
-                             *     else if router_path_is_empty
-                             *         download_content
-                             *         else
-                             *             forward_message_to_tail
-                             */
+                        case RESPONSE_CONTENT:
+                            processResponseContentPacket((ResponseContentMobileNetworkPDU) pdu);
                             break;
                         default:
                             // drop
@@ -138,22 +118,29 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
         boolean isUpdatedTable;
 
         isMyself = peerID.equals(representativeNode.getMacAddr());
-        synchronized (keepaliveTable) { isNewPeer = !keepaliveTable.hasPeer(peerID); }
-        isUpdatedTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID) < peerRoutingTable.getCurrentTableVersion();
+        synchronized (keepaliveTable) {
+            isNewPeer = !keepaliveTable.hasPeer(peerID);
+        }
+        synchronized (contentRoutingTable) {
+            isUpdatedTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID) < peerRoutingTable.getCurrentTableVersion();
 
-        if (!isMyself && (isNewPeer || isUpdatedTable)) {
-            LOGGER.debug("Received: " + helloPDU.toString());
+            if (!isMyself && (isNewPeer || isUpdatedTable)) {
+                LOGGER.debug("Received: " + helloPDU.toString());
 
-            peerRoutingTable.incVersion();
-            peerRoutingTable.entrySet().forEach(
-                    entry ->
-                            contentRoutingTable.addReference(
-                                    entry.getKey(),
-                                    entry.getValue().getFileName(),
-                                    entry.getValue().getDstMAC(),
-                                    peerID,
-                                    1 + entry.getValue().getHopCount()));
-            synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
+                peerRoutingTable.incVersion();
+                peerRoutingTable.entrySet().forEach(
+                        entry ->
+                                contentRoutingTable.addReference(
+                                        entry.getKey(),
+                                        entry.getValue().getFileName(),
+                                        entry.getValue().getDstMAC(),
+                                        peerID,
+                                        1 + entry.getValue().getHopCount()));
+            }
+
+            synchronized (keepaliveTable) {
+                keepaliveTable.markAsAlive(peerID);
+            }
 
             // New changes were made, send them out
             representativeNode.sendHelloMessage(LINK_MULTICAST.toString());
@@ -166,12 +153,16 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
         String peerID = pdu.getSrcMAC();
         boolean alreadyKnowPeer;
 
-        synchronized (keepaliveTable) { alreadyKnowPeer = keepaliveTable.hasPeer(peerID); }
+        synchronized (keepaliveTable) {
+            alreadyKnowPeer = keepaliveTable.hasPeer(peerID);
+        }
 
         if (alreadyKnowPeer) {
             representativeNode.sendPongMessage(pdu.getSrcMAC(), pdu.getSessionID());
         } else {
-            synchronized (keepaliveTable) { keepaliveTable.markAsAlive(peerID); }
+            synchronized (keepaliveTable) {
+                keepaliveTable.markAsAlive(peerID);
+            }
             representativeNode.sendHelloMessage(pdu.getSrcMAC());
         }
     }
@@ -183,7 +174,9 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
         String sessionID = pdu.getSessionID();
         boolean isPingRecent;
 
-        synchronized (keepaliveTable) { isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID); }
+        synchronized (keepaliveTable) {
+            isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
+        }
         if (isPingRecent) {
             LOGGER.debug("Marked peer " + peerID + " as alive");
         } else {
@@ -191,7 +184,38 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
         }
     }
 
-    private boolean amIPartOfDestination(String source, String destination) {
+    private void processRequestContentPacket(RequestContentMobileNetworkPDU pdu) {
+        String[] nodePath = pdu.getNodePath();
+        String source = pdu.getSrcMAC();
+        String destination = pdu.getDstMAC();
+
+        if (isNodePartOfLinkDestination(source, destination)) {
+
+            // The message is directed to this node on a link level
+
+            // Now parse regarding to the node path: Am I the next hop?
+
+            String myMAC = representativeNode.getMacAddr();
+
+            if (nodePath[nodePath.length - 1].equals(myMAC)) {
+                if(destination.equals(myMAC)) {
+                    // Situation 1: I am a final next hop
+                    // Create a ContentResponsePDU and set the destination to the node that requested it
+
+                } else {
+                    // Situation 2: I am an intermediate next hop
+                    // Pop the node path and forward
+
+                }
+            }
+        }
+    }
+
+    private void processResponseContentPacket(ResponseContentMobileNetworkPDU pdu) {
+
+    }
+
+    private boolean isNodePartOfLinkDestination(String source, String destination) {
         String myMacAddr = representativeNode.getMacAddr();
 
         // Ignore messages the node created itself
@@ -205,6 +229,5 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                 || destination.equals(LINK_BROADCAST.toString())    // It is a broadcast message
                 || destination.equals(LINK_MULTICAST.toString()));  // It is a subscribed multicast message
     }
-
 }
 
