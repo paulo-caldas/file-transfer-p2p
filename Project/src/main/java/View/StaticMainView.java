@@ -5,7 +5,7 @@ import View.Utilities.Option;
 
 import java.util.Arrays;
 
-public class MainView implements TextualView {
+public class StaticMainViewStatic implements StaticTextualView {
 
     private final Menu menu =
             new Menu("Main menu",
