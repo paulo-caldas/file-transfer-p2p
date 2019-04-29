@@ -2,20 +2,30 @@ package Business.MobileNetworkNode;
 
 import java.io.*;
 import java.net.*;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 import Business.MobileNetworkNode.Daemon.MobileNodeKeepaliveDaemon;
 import Business.MobileNetworkNode.Daemon.MobileNodeListeningDaemon;
 import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
+import Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry;
 import Business.PDU.HelloMobileNetworkPDU;
 import Business.PDU.MobileNetworkPDU;
 
+import Business.PDU.RequestContentMobileNetworkPDU;
+import Business.PDU.ResponseContentMobileNetworkPDU;
 import Business.Utils;
-import View.MainView;
+import View.DynamicContentSearchResultsView;
+import View.StaticMainView;
 import View.Utilities.Menu;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
+
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.*;
+import static Business.PDU.MobileNetworkPDU.STANDARD_TTL;
 
 public class MobileNode {
 
@@ -155,35 +165,77 @@ public class MobileNode {
     }
 
     private void mainUserInteraction() {
-        Menu menu = new MainView().getMenu();
-        String opcao;
+        Menu menu = new StaticMainView().getMenu();
+        String option;
         do {
             menu.show();
-            opcao = new Scanner(System.in).nextLine().toUpperCase();
-            switch(opcao) {
+            option = new Scanner(System.in).nextLine().toUpperCase();
+            switch(option) {
                 case "D" : downloadInteraction();
                            break;
                 case "E": System.out.println("Leaving...");
                           break;
                 default: break;
             }
-        }
-        while(!opcao.equals("E"));
+        } while(!option.equals("E"));
     }
 
     private void downloadInteraction() {
-        System.out.println("Type keywords related to the content you're looking for (separated by spaces): ");
-        String input = scanner.nextLine();
-        String[] spaceSeparatedParams = input.split(" ");
+        // First ask for user to input the name of the file (
+        System.out.print("Type names to query for:");
+        String queryString = scanner.nextLine();
+
+        // search in local routing table for files with similar name
+
+        List<Map.Entry<String,RoutingTableEntry>> matchingEntries;
+        synchronized (contentRoutingTable) {
+            matchingEntries = contentRoutingTable.similarFileNameSearch(queryString);
+        }
+
+        // show user the results and ask him to search for one
+        DynamicContentSearchResultsView contentSearchResultsView = new DynamicContentSearchResultsView();
+
+        matchingEntries.stream()
+                       .forEach(tableEntry -> contentSearchResultsView.addOption(tableEntry.getValue()));
+
+        Menu menu = contentSearchResultsView.getMenu();
+        String option;
+        do {
+            menu.show();
+            option = new Scanner(System.in).nextLine().toUpperCase();
+
+            // Check if a number was added as input
+            if (option.matches("-?(0|[1-9]\\d*)")) {
+                int optionInt = Integer.parseInt(option);
+                byte[] content = getContent(matchingEntries.get(optionInt).getKey());
+            }
+
+        } while(!option.equals("E"));
+    }
+
+    private byte[] getContent(String fileHash) {
+        RoutingTableEntry entry;
+
+        synchronized(contentRoutingTable) {
+           entry = contentRoutingTable.get(fileHash);
+        }
+
+        String destinationMAC = entry.getDstMAC();
+        String nextHopMAC = entry.getNextHopMAC();
+        int hopCount = entry.getHopCount();
+
+        sendRequestContentMessage(destinationMAC, nextHopMAC, hopCount, fileHash);
+
+        return null;
     }
 
     public void sendHelloMessage(String dstMac) {
         MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
                 macAddr,
                 dstMac,
-                Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.HELLO,
-                Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID,
-                62,
+                HELLO,
+                VALID,
+                STANDARD_TTL,
                 String.valueOf(currentHelloSessionID),
                 contentRoutingTable);
         sendPDU(helloPacket);
@@ -194,9 +246,9 @@ public class MobileNode {
         MobileNetworkPDU pingPacket = new MobileNetworkPDU(
                 macAddr,
                 dstMac,
-                Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.PING,
-                Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID,
-                62,
+                PING,
+                VALID,
+                STANDARD_TTL,
                 sessionID);
         sendPDU(pingPacket);
     }
@@ -205,11 +257,48 @@ public class MobileNode {
         MobileNetworkPDU pongPacket = new MobileNetworkPDU(
                 macAddr,
                 dstMac,
-                Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.PONG,
-                Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID,
-                62,
+                PONG,
+                VALID,
+                STANDARD_TTL,
                 sessionID);
         sendPDU(pongPacket);
+    }
+
+    public void sendRequestContentMessage(String dstMac, String nextHopMAC, int hopCount, String fileHash) {
+        String[] nodePath = new String[hopCount + 1]; // If a path has N hops (or archs), it has N+1 nodes along the path
+        nodePath[0] = macAddr; // The first node is the origin of the request message
+        nodePath[1] = nextHopMAC; // The last node is always the next hop the request is routed to
+
+        RequestContentMobileNetworkPDU requestContentMobileNetworkPDU = new RequestContentMobileNetworkPDU(
+               macAddr,
+               dstMac,
+               REQUEST_CONTENT,
+               VALID,
+               STANDARD_TTL,
+               fileHash,
+               nodePath);
+        sendPDU(requestContentMobileNetworkPDU);
+    }
+
+    public void respondToRequestContent(RequestContentMobileNetworkPDU pdu) {
+        String[] nodePath = pdu.getNodePath();
+        String peerIDOfRequester = nodePath[0];
+
+        // A node path was made whilst the request message was routed
+        // To reply, simply pop the last element (which should be our node), and forward the message back
+
+        String[] poppedNodePath = Arrays.copyOf(nodePath, nodePath.length - 1);
+
+        ResponseContentMobileNetworkPDU responsePDU = new ResponseContentMobileNetworkPDU(
+                macAddr,
+                peerIDOfRequester,
+                RESPONSE_CONTENT,
+                VALID,
+                STANDARD_TTL,
+                pdu.getSessionID(),
+                poppedNodePath,
+                "Teste!!");
+        sendPDU(responsePDU);
     }
 
     void sendPDU(MobileNetworkPDU pdu) {
