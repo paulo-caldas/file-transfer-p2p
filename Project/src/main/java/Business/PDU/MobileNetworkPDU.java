@@ -9,8 +9,10 @@ public class MobileNetworkPDU implements Serializable {
     }
 
     public enum MobileNetworkMessageType {
-        PING, PONG, HELLO, REQUEST_CONTENT, REPLY_CONTENT;
+        PING, PONG, HELLO, REQUEST_CONTENT, RESPONSE_CONTENT;
     }
+
+    public static final int STANDARD_TTL = 62;
 
     private String srcMAC;
     private String dstMAC;
