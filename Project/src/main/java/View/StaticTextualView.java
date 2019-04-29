@@ -2,6 +2,6 @@ package View;
 
 import View.Utilities.Menu;
 
-public interface TextualView {
+public interface StaticTextualView {
     Menu getMenu();
 }

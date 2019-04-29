@@ -25,17 +25,21 @@ public class Menu {
     public Menu(String title, List<Option> options) {
         this.options = options;
         this.title = title;
+        this.horizontalSize = getMaxHorizontalSize();
 
+    }
+
+    public int getMaxHorizontalSize() {
         // Calculate the biggest horizontal string size of the menu, for drawing purposes
         List<String> allDrawableStrings = new ArrayList<>();
         allDrawableStrings.addAll(this.options.stream().map(Option::toString).collect(Collectors.toList()));
         allDrawableStrings.add(this.title);
 
-        this.horizontalSize = allDrawableStrings
-                .stream()
-                .map(String::length)
-                .max(Integer::compareTo)
-                .orElse(0);
+        return allDrawableStrings
+                   .stream()
+                   .map(String::length)
+                   .max(Integer::compareTo)
+                   .orElse(0);
     }
 
     private void clearConsole() {
@@ -52,6 +56,24 @@ public class Menu {
                 e.printStackTrace();
             }
         }
+    }
+
+    public void addOption(int index, Option op) {
+        this.options.add(index, op);
+
+        // New option was added, see if we need to change the maximum horizontal character size
+        this.horizontalSize = getMaxHorizontalSize();
+    }
+
+    public void addOption(Option op) {
+        this.options.add(op);
+
+        // New option was added, see if we need to change the maximum horizontal character size
+        this.horizontalSize = getMaxHorizontalSize();
+    }
+
+    public void deleteOption(String id) {
+        this.options.removeIf(option -> option.getTag().equals(id));
     }
 
     public void show() {
