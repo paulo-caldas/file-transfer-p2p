@@ -160,9 +160,10 @@ public class MobileNode {
         mobileNodeListeningDaemonThread.join();
         mobileNodeKeepAliveDaemonThread.join();
 
+        LOGGER.debug("Finished mobile node process");
+
         logNodeInfo();
 
-        LOGGER.debug("Finished mobile node process");
         System.out.println("Info logged in " + macAddr + "_MobileNodeLog.xml");
     }
 
@@ -324,10 +325,13 @@ public class MobileNode {
     }
 
     private void logNodeInfo() {
-        LOGGER.debug("Mac address: " + macAddr);
-        LOGGER.debug("Routing table\n:" + contentRoutingTable.toString());
-        LOGGER.debug("Peer Keepalive table\n: " + peerKeepaliveTable.toString());
-        LOGGER.debug("Hello session id: " + currentHelloSessionID);
+        String nodeInfo = String.format("STATISTICS: \n Mac address: %s \n Routing table \n %s \n Peer Keepalive table\n %s \n Hello session id: %s",
+                macAddr,
+                contentRoutingTable.toString(),
+                peerKeepaliveTable.toString(),
+                currentHelloSessionID);
+
+        LOGGER.debug(nodeInfo);
     }
 
 }
