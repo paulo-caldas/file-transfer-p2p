@@ -42,7 +42,6 @@ public class PeerKeepaliveTable<A,B> {
     }
 
     public void markAsAlive(B peerId) {
-        System.out.println(" Marking as alive " + peerId);
         peerKeepaliveTable.put(peerId, -1);
     }
 
