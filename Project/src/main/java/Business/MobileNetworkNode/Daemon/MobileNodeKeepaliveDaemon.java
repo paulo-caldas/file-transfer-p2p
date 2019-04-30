@@ -66,7 +66,7 @@ public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
         String timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
         synchronized (keepaliveTable) {
             keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
-            keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow));
+            keepaliveTable.getPeers().forEach(peer -> { representativeNode.sendHelloMessage((String) peer); });
         }
     }
 

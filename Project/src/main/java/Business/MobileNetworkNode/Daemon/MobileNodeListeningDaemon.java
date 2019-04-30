@@ -58,17 +58,19 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
 
     private void listenForPeers() {
         LOGGER.debug("Listening for peers");
+        byte[] data;
         while(!finished) {
             // Await for a connection to be made, and parse it as a PDU object
             try {
                 receiveServerSocket.receive(receivePacket);
-                byte[] data = receivePacket.getData();
+                data = receivePacket.getData();
                 ByteArrayInputStream in = new ByteArrayInputStream(data);
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
                 MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
                 // Retrieve important variables that dictate what to do next
                 String source = pdu.getSrcMAC();
                 String destination = pdu.getDstMAC();
+
 
                 // Only proceed if the message is directed towards me
                 if (isNodePartOfLinkDestination(source, destination)) {
