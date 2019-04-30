@@ -109,7 +109,6 @@ public class MobileNode {
                 try {
                     synchronized (contentRoutingTable) {
                         contentRoutingTable.addOwnedReference(file);
-                        LOGGER.info("Size is now " + contentRoutingTable.size());
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -164,6 +163,7 @@ public class MobileNode {
         logNodeInfo();
 
         LOGGER.debug("Finished mobile node process");
+        System.out.println("Info logged in " + macAddr + "_MobileNodeLog.xml");
     }
 
     private void mainUserInteraction() {
