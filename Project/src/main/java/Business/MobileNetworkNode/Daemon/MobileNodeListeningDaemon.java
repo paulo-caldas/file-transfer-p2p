@@ -135,14 +135,15 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                                         entry.getValue().getDstMAC(),
                                         peerID,
                                         1 + entry.getValue().getHopCount()));
-            }
 
-            synchronized (keepaliveTable) {
-                keepaliveTable.markAsAlive(peerID);
-            }
+                synchronized (keepaliveTable) {
+                    keepaliveTable.markAsAlive(peerID);
+                }
 
-            // New changes were made, send them out
-            representativeNode.sendHelloMessage(LINK_MULTICAST.toString());
+                // New changes were made, send them out
+                representativeNode.sendHelloMessage(LINK_MULTICAST.toString());
+
+            }
         }
     }
 
