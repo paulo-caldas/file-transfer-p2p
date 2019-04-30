@@ -120,7 +120,7 @@ public class MobileNode {
             receiveServerSocket = new MulticastSocket(port);
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
             sendServerSocket = new MulticastSocket(port);
-            receivePacket = new DatagramPacket(new byte[1024], 1024);
+            receivePacket = new DatagramPacket(new byte[2048], 2048);
 
             scanner = new Scanner(System.in);
         } catch (Exception e) {
