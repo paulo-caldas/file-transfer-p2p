@@ -22,7 +22,6 @@ import View.StaticMainView;
 import View.Utilities.Menu;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
-
 import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID;
 import static Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.*;
 import static Business.PDU.MobileNetworkPDU.STANDARD_TTL;
@@ -108,7 +107,10 @@ public class MobileNode {
             filesInPath.forEach(( file ->  {
                 LOGGER.info("Indexing file: " + file.getName());
                 try {
-                    contentRoutingTable.addOwnedReference(file);
+                    synchronized (contentRoutingTable) {
+                        contentRoutingTable.addOwnedReference(file);
+                        LOGGER.info("Size is now " + contentRoutingTable.size());
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

@@ -27,7 +27,6 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
 
     public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
         String fileHash = Utils.hashFile(file, "md5");
-        System.out.println("adding : " + fileHash + file.getName() + ownerID);
         contentRoutingTable.put(fileHash,
                 new RoutingTableEntry(file.getName(),
                         ownerID,
