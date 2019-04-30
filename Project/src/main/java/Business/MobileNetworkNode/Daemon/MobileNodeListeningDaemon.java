@@ -65,8 +65,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                 byte[] data = receivePacket.getData();
                 ByteArrayInputStream in = new ByteArrayInputStream(data);
                 ObjectInputStream objectInputStream = new ObjectInputStream(in);
-                MobileNetworkPDU pdu = null;
-                pdu = (MobileNetworkPDU) objectInputStream.readObject();
+                MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
                 // Retrieve important variables that dictate what to do next
                 String source = pdu.getSrcMAC();
                 String destination = pdu.getDstMAC();

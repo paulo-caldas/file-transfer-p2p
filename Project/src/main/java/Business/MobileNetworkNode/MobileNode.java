@@ -89,8 +89,7 @@ public class MobileNode {
 
         try {
             // Setting up needed instance variables
-            //NetworkInterface eth0 = NetworkInterface.getByName("eth0");
-            NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
+            NetworkInterface eth0 = NetworkInterface.getByName("eth0");
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
