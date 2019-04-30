@@ -90,6 +90,7 @@ public class MobileNode {
         try {
             // Setting up needed instance variables
             NetworkInterface eth0 = NetworkInterface.getByName("eth0");
+            //NetworkInterface eth0 = NetworkInterface.getNetworkInterfaces().nextElement();
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
@@ -181,7 +182,7 @@ public class MobileNode {
 
     private void downloadInteraction() {
         // First ask for user to input the name of the file (
-        System.out.print("Type names to query for:");
+        System.out.print("Type names to query for(Enter for all):");
         String queryString = scanner.nextLine();
 
         // search in local routing table for files with similar name
