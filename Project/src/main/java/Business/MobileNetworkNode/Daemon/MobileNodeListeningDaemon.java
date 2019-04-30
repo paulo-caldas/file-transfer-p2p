@@ -137,6 +137,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                                         1 + entry.getValue().getHopCount()));
 
                 synchronized (keepaliveTable) {
+                    LOGGER.info("Marked peer " + peerID + " as alive (received HELLO with new content, e.g. unknown peer or known peer with updated table)");
                     keepaliveTable.markAsAlive(peerID);
                 }
 
@@ -163,6 +164,9 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             synchronized (keepaliveTable) {
                 keepaliveTable.markAsAlive(peerID);
             }
+
+            LOGGER.info("Marked peer " + peerID + " as alive (received PING from unknown peer)");
+
             representativeNode.sendHelloMessage(pdu.getSrcMAC());
         }
     }
@@ -178,9 +182,9 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             isPingRecent = keepaliveTable.markAsAlive(sessionID, peerID);
         }
         if (isPingRecent) {
-            LOGGER.debug("Marked peer " + peerID + " as alive");
+            LOGGER.debug("Marked peer " + peerID + " as alive (received updated PONG)");
         } else {
-            LOGGER.debug("Received outdated keepalive from " + peerID);
+            LOGGER.debug("Received outdated keepalive PONG from " + peerID);
         }
     }
 
