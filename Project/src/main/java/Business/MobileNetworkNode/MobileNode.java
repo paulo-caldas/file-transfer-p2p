@@ -325,7 +325,7 @@ public class MobileNode {
     }
 
     private void logNodeInfo() {
-        String nodeInfo = String.format("STATISTICS: \n Mac address: %s \n Routing table \n %s \n Peer Keepalive table\n %s \n Hello session id: %s",
+        String nodeInfo = String.format("STATISTICS: \n-Mac address: %s \n-Routing table \n %s \n-Peer Keepalive table\n %s \n-Hello session id: %s",
                 macAddr,
                 contentRoutingTable.toString(),
                 peerKeepaliveTable.toString(),
