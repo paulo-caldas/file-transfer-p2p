@@ -16,6 +16,7 @@ import java.io.ObjectInputStream;
 import java.net.DatagramPacket;
 import java.net.MulticastSocket;
 import java.net.SocketException;
+import java.util.Map;
 
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_MULTICAST;
@@ -29,6 +30,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
     private final MobileNode representativeNode;
     private final RoutingTable contentRoutingTable;
     private final PeerKeepaliveTable keepaliveTable;
+    private Map<String, Integer> hashOfPeersMostRecentContentTable;
     private final MulticastSocket receiveServerSocket;
     private DatagramPacket receivePacket;
     private final Logger LOGGER;
@@ -39,6 +41,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
         this.representativeNode = representativeNode;
         this.contentRoutingTable = representativeNode.getRoutingTable();
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
+        this.hashOfPeersMostRecentContentTable = representativeNode.getHashOfPeersMostRecentContentTable();
         this.receiveServerSocket = representativeNode.getReceiveServerSocket();
         this.receivePacket = representativeNode.getReceivePacket();
         this.LOGGER = representativeNode.getLogger();
@@ -123,32 +126,38 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             isNewPeer = !keepaliveTable.hasPeer(peerID);
         }
         synchronized (contentRoutingTable) {
-            long mostRecentVersionOfPeerInMyTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID);
-            long tableVersionOfPeer = peerRoutingTable.getCurrentTableVersion();
+            int hashOfReceivedTable = peerRoutingTable.getMostRecentHash();
+            long mostRecentVersionOfPeerInMyTable;
+            synchronized (hashOfPeersMostRecentContentTable) {
+                mostRecentVersionOfPeerInMyTable = hashOfPeersMostRecentContentTable.getOrDefault(peerID, -1);
+            }
 
-            isUpdatedTable = mostRecentVersionOfPeerInMyTable < tableVersionOfPeer;
+            isUpdatedTable = (mostRecentVersionOfPeerInMyTable == -1 || mostRecentVersionOfPeerInMyTable != hashOfReceivedTable);
 
             if (!isMyself && (isNewPeer || isUpdatedTable)) {
                 LOGGER.debug("Received: " + helloPDU.toString());
 
-                peerRoutingTable.incVersion();
-                peerRoutingTable.entrySet().forEach(
-                        entry ->
-                                contentRoutingTable.addReference(
-                                        entry.getKey(),
-                                        entry.getValue().getFileName(),
-                                        entry.getValue().getDstMAC(),
-                                        peerID,
-                                        1 + entry.getValue().getHopCount()));
+                int numberOfChanges = contentRoutingTable.joinTable(peerRoutingTable);
 
+                // Mark peer as alive, because we received an hello after all
                 synchronized (keepaliveTable) {
-                    LOGGER.info("Most recent entry received has timestamp " + mostRecentVersionOfPeerInMyTable + " (-1 if none). Received table version " + tableVersionOfPeer);
-                    LOGGER.info("Marked peer " + peerID + " as alive (received HELLO with new content, e.g. unknown peer or known peer with updated table)");
                     keepaliveTable.markAsAlive(peerID);
                 }
 
-                // New changes were made, send them out
-                representativeNode.sendHelloMessage(LINK_MULTICAST.toString());
+                // If anything at all changed in our table
+                if (numberOfChanges > 0) {
+                    LOGGER.info("HELLO message that was received incurred in a new routing table");
+
+                    // Remember what the most recent change related to that peer was (so next time isUpdatedTable = false)
+                    synchronized (hashOfPeersMostRecentContentTable) {
+                        hashOfPeersMostRecentContentTable.put(peerID, hashOfReceivedTable);
+                    }
+
+                    // New changes were made, send them out to peers
+                    representativeNode.sendHelloMessage(LINK_MULTICAST.toString());
+                } else {
+                    LOGGER.info("HELLO message that was received had no new information");
+                }
 
             }
         }

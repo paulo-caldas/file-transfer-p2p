@@ -8,6 +8,7 @@ import org.apache.log4j.Logger;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Daemon responsible for, in behalf of a mobile node, testing for the presence
@@ -18,6 +19,7 @@ public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
     private final MobileNode representativeNode;
     private final PeerKeepaliveTable keepaliveTable;
     private final RoutingTable contentRoutingTable;
+    private Map<String, Integer> hashOfPeersMostRecentContentTable;
     private final int KEEPAWAY_TIME_MS = 5000;
     private final int HELLO_FLOODING_PERIODICITY = 3; // every 3 KEEPARAY_TIME_MS, flood with HELLO
     private final Logger LOGGER;
@@ -27,6 +29,7 @@ public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
         this.representativeNode = representativeNode;
         this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
         this.contentRoutingTable = representativeNode.getRoutingTable();
+        this.hashOfPeersMostRecentContentTable = representativeNode.getHashOfPeersMostRecentContentTable();
         this.LOGGER = representativeNode.getLogger();
     }
 
@@ -52,6 +55,7 @@ public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
                 removeDeadPeers();
 
                 if (period++ == HELLO_FLOODING_PERIODICITY) {
+                    // TODO: ping flood?
                     sendHelloFlood();
                     period = 0;
                 }
@@ -81,16 +85,25 @@ public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
         // The previous method returns all the peers that were removed
         // All that is left is to remove all references of those peers
         // From the content table
-        synchronized (contentRoutingTable) {
-            removedPeers.forEach(peer -> contentRoutingTable.removePeer(peer));
-        }
+        removedPeers.forEach(peer -> {
+            synchronized (contentRoutingTable) {
+                contentRoutingTable.removePeer(peer);
+            }
+            synchronized (hashOfPeersMostRecentContentTable) {
+                hashOfPeersMostRecentContentTable.remove(peer);
+            }
 
+        });
 
         LOGGER.info("Removed peers: " + removedPeers.toString());
     }
 
     private void sendHelloFlood() {
         representativeNode.sendHelloMessage(MobileNode.AddressType.LINK_MULTICAST.toString());
+    }
+
+    private void sendPingFlood() {
+        representativeNode.sendPingMessage(MobileNode.AddressType.LINK_MULTICAST.toString(), "-1");
     }
 }
 
