@@ -2,10 +2,7 @@ package Business.MobileNetworkNode;
 
 import java.io.*;
 import java.net.*;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 import Business.MobileNetworkNode.Daemon.MobileNodeKeepaliveDaemon;
 import Business.MobileNetworkNode.Daemon.MobileNodeListeningDaemon;
@@ -50,18 +47,12 @@ public class MobileNode {
         }
     }
 
-    final static Logger LOGGER = Logger.getLogger(MobileNode.class);
+    private final Logger LOGGER = Logger.getLogger(MobileNode.class);
 
     private MulticastSocket receiveServerSocket;
     private MulticastSocket sendServerSocket;
 
     private DatagramPacket receivePacket;
-    private DatagramPacket sendPacket;
-
-    private ByteArrayOutputStream outputStream;
-    private ObjectOutputStream os;
-
-    private byte[] buffer;
 
     private String macAddr;
     private InetAddress group;
@@ -69,6 +60,7 @@ public class MobileNode {
 
     private RoutingTable contentRoutingTable;
     private PeerKeepaliveTable<String, String> peerKeepaliveTable;
+    private Map<String, Integer> hashOfPeersMostRecentContentTable;
 
     private Integer currentHelloSessionID;
 
@@ -78,6 +70,7 @@ public class MobileNode {
     public String getMacAddr() { return macAddr; }
     public RoutingTable getRoutingTable() { return contentRoutingTable; }
     public PeerKeepaliveTable getPeerKeepaliveTable() { return peerKeepaliveTable; }
+    public Map<String, Integer> getHashOfPeersMostRecentContentTable() { return hashOfPeersMostRecentContentTable; }
     public MulticastSocket getReceiveServerSocket() { return this.receiveServerSocket; }
     public DatagramPacket getReceivePacket() { return this.receivePacket; }
 
@@ -103,6 +96,7 @@ public class MobileNode {
 
             // Populating content sharing table with all files inside the sharind directory folder passed by argument
             contentRoutingTable = new RoutingTable(this.macAddr);
+
             List<File> filesInPath = Utils.getFilesInsidePath(sharingDirectory);
             filesInPath.forEach(( file ->  {
                 LOGGER.info("Indexing file: " + file.getName());
@@ -117,6 +111,9 @@ public class MobileNode {
 
             // Setting up the table to help keep count of what peers did not prove they're alive
             peerKeepaliveTable = new PeerKeepaliveTable("n/a", 3);
+
+            // Setting up to table to help keep track of the hash of the last content table that we used (so we dont keep updating information we already know of)
+            hashOfPeersMostRecentContentTable = new HashMap<>();
 
             // Setting up sockets and packets, needed for UDP communication
             receiveServerSocket = new MulticastSocket(port);
@@ -199,6 +196,7 @@ public class MobileNode {
         DynamicContentSearchResultsView contentSearchResultsView = new DynamicContentSearchResultsView();
 
         matchingEntries.stream()
+                       .sorted(Comparator.comparingInt(entry -> entry.getValue().getHopCount()))
                        .forEach(tableEntry -> contentSearchResultsView.addOption(tableEntry.getValue()));
 
         Menu menu = contentSearchResultsView.getMenu();
@@ -306,15 +304,15 @@ public class MobileNode {
 
     void sendPDU(MobileNetworkPDU pdu) {
         try {
-            outputStream = new ByteArrayOutputStream();
-            os = new ObjectOutputStream(outputStream);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            ObjectOutputStream os = new ObjectOutputStream(outputStream);
 
             os.writeObject(pdu);
             os.flush();
 
-            buffer = outputStream.toByteArray();
+            byte[] buffer = outputStream.toByteArray();
 
-            sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
+            DatagramPacket sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
 
