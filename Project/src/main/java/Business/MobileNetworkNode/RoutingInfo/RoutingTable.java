@@ -63,10 +63,12 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                 } else {
                     /**
                      * A new line already exists in the table refering to that file hash...
-                     * How do we conclude that the proposed new ine does not bring new information?
+                     * How do we conclude that the proposed new one does not bring new information?
                      * Keep in mind that we're comparing entries from different tables:
                      * - existingEntry is from this node's frame of reference
                      * - tableEntry is from the frame of reference of the node that announced this table to me
+                     * At the moment, the strategy is to keep a single reference to a file (because in the future, fileHash will be the hash of a chunk, not the entire file).
+                     * As such, we update the existing one if it is referencing the same next hop, but with new information
                      * Either if the destination is new, the next hop is new, the file name is new, or the hops to get there have changed
                      * So if a single one is true, we deem worthy to update
                      **/
@@ -76,7 +78,9 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                     boolean equalFileName = tableEntry.getFileName().equals(existingEntry.getFileName());
                     boolean equalHopCount = (tableEntry.getHopCount() + 1) == existingEntry.getHopCount(); // Why + 1? The existing table references THIS one, whereas the received table to merge references the neightbour node
 
-                    isChangesMade = (!equalDestinations || !equalNextHop || !equalFileName || !equalHopCount);
+                    // We consider updating the table regarding a file hash if
+                    isChangesMade = (equalNextHop // the new entry references the SAME neighbour (We choose to have only a single neighbour updating us on a file)
+                                     && (!equalDestinations || !equalFileName || !equalHopCount)); // and something about the entry changes
                 }
 
                 if (isChangesMade) {
