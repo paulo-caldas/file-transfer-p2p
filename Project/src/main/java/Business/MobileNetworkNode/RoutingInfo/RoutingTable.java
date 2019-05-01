@@ -53,9 +53,11 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
             boolean isChangesMade = false;
             String fileHash = entry.getKey();
             RoutingTableEntry tableEntry = entry.getValue();
+            RoutingTableEntry existingEntry = null;
 
-            // Ignore entries where I am the destination in question (somewhat of a local split-horizon)
-            if (!tableEntry.getDstMAC().equals(ownerID)) {
+            // Ignore entries where I am the destination in question or the next hop (somewhat of a local split-horizon)
+            // AKA 'do not tell me about a path regarding my local files nor a path where i am a member of
+            if (!tableEntry.getDstMAC().equals(ownerID) && !tableEntry.getNextHopMAC().equals(ownerID)) {
 
                 if (!contentRoutingTable.containsKey(fileHash)) {
                     isChangesMade = true;
@@ -72,7 +74,7 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                      * Either if the destination is new, the next hop is new, the file name is new, or the hops to get there have changed
                      * So if a single one is true, we deem worthy to update
                      **/
-                    RoutingTableEntry existingEntry = contentRoutingTable.get(fileHash);
+                    existingEntry = contentRoutingTable.get(fileHash);
                     boolean equalDestinations = tableEntry.getDstMAC().equals(existingEntry.getDstMAC());
                     boolean equalNextHop = peerID.equals(existingEntry.getNextHopMAC());
                     boolean equalFileName = tableEntry.getFileName().equals(existingEntry.getFileName());
@@ -81,16 +83,18 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                     // We consider updating the table regarding a file hash if
                     isChangesMade = (equalNextHop // the new entry references the SAME neighbour (We choose to have only a single neighbour updating us on a file)
                                      && (!equalDestinations || !equalFileName || !equalHopCount)); // and something about the entry changes
+
                 }
 
                 if (isChangesMade) {
                     changeCount++;
-
-                    this.addReference(fileHash,
+                    RoutingTableEntry newEntry =
                             new RoutingTableEntry(tableEntry.getFileName(), // File name is the same
                                     tableEntry.getDstMAC(),   // Destination is the same
                                     peerID,                   // The next hop is not the next hop of peer that gave me the table, but that peer itself
-                                    1 + tableEntry.getHopCount())); // The number of hops is incremented because a neighbour gave me HIS table, so mine is 1+ away to destination
+                                    1 + tableEntry.getHopCount()); // The number of hops is incremented because a neighbour gave me HIS table, so mine is 1+ away to destination
+
+                    this.addReference(fileHash, newEntry);
                 }
             }
         }
