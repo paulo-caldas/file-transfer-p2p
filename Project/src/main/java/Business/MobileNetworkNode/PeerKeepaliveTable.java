@@ -33,11 +33,11 @@ public class PeerKeepaliveTable<A,B> {
 
             if (newStrikeValue >= MAX_STRIKES) {
                 B removedPeer = entry.getKey();
-                peerKeepaliveTable.remove(removedPeer);
                 removedPeers.add(removedPeer);
             }
         }
 
+        peerKeepaliveTable.keySet().removeAll(removedPeers);
         return removedPeers;
     }
 
