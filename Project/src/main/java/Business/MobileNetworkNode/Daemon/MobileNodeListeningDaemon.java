@@ -123,7 +123,10 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
             isNewPeer = !keepaliveTable.hasPeer(peerID);
         }
         synchronized (contentRoutingTable) {
-            isUpdatedTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID) < peerRoutingTable.getCurrentTableVersion();
+            long mostRecentVersionOfPeerInMyTable = contentRoutingTable.getMostRecentEntryVersionOfPeer(peerID);
+            long tableVersionOfPeer = peerRoutingTable.getCurrentTableVersion();
+
+            isUpdatedTable = mostRecentVersionOfPeerInMyTable < tableVersionOfPeer;
 
             if (!isMyself && (isNewPeer || isUpdatedTable)) {
                 LOGGER.debug("Received: " + helloPDU.toString());
@@ -139,6 +142,7 @@ public class MobileNodeListeningDaemon implements MobileNodeDaemon {
                                         1 + entry.getValue().getHopCount()));
 
                 synchronized (keepaliveTable) {
+                    LOGGER.info("Most recent entry received has timestamp " + mostRecentVersionOfPeerInMyTable + " (-1 if none). Received table version " + tableVersionOfPeer);
                     LOGGER.info("Marked peer " + peerID + " as alive (received HELLO with new content, e.g. unknown peer or known peer with updated table)");
                     keepaliveTable.markAsAlive(peerID);
                 }
