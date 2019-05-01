@@ -15,14 +15,14 @@ import static Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry.EntryType
 
 public class RoutingTable implements Map<String, RoutingTableEntry>, Serializable {
 
-    private long currentTableVersion;
     private String ownerID;
+    private Integer routingTableHash; // hash of the most recent version of the routing table, used so peers can know if they already know about it or not
     private Map<String, RoutingTableEntry> contentRoutingTable; // Key is file hash
 
     public RoutingTable(String ownerID) {
-        this.currentTableVersion = System.currentTimeMillis();
         this.ownerID = ownerID;
         this.contentRoutingTable = new HashMap<>();
+        this.routingTableHash = 0;
     }
 
     public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
@@ -31,32 +31,72 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
                 new RoutingTableEntry(file.getName(),
                         ownerID,
                         NULL_ENTRY.toString(),
-                        0,
-                        currentTableVersion));
+                        0));
     }
 
-    public void addReference(String fileHash, String fileName, String destination, String nextHop, Integer hopCount) {
+    public void addReference(String fileHash, RoutingTableEntry entry) {
         contentRoutingTable.put(
                 fileHash,
                 new RoutingTableEntry(
-                        fileName,
-                        destination,
-                        nextHop,
-                        hopCount,
-                        currentTableVersion
-                ));
+                        entry.getFileName(),
+                        entry.getDstMAC(),
+                        entry.getNextHopMAC(),
+                        entry.getHopCount()));
     }
 
-    public Long getMostRecentEntryVersionOfPeer(String peerID) {
+    public int joinTable(RoutingTable table) {
+        int changeCount = 0;
+        String peerID = table.getOwnerID();
+        Map<String, RoutingTableEntry> peerContentRoutingTable = table.getContentRoutingTable();
 
-        Predicate<RoutingTableEntry> peerIsNextHop = entry -> entry.getNextHopMAC().equals(peerID);
+        for (Map.Entry<String, RoutingTableEntry> entry : peerContentRoutingTable.entrySet()) {
+            boolean isChangesMade = false;
+            String fileHash = entry.getKey();
+            RoutingTableEntry tableEntry = entry.getValue();
 
-        return contentRoutingTable.values()
-                .stream()
-                .filter(peerIsNextHop)
-                .map(RoutingTableEntry::getVersion)
-                .max(Long::compareTo)
-                .orElse(-1L);
+            // Ignore entries where I am the destination in question (somewhat of a local split-horizon)
+            if (!tableEntry.getDstMAC().equals(ownerID)) {
+
+                if (!contentRoutingTable.containsKey(fileHash)) {
+                    isChangesMade = true;
+
+                } else {
+                    /**
+                     * A new line already exists in the table refering to that file hash...
+                     * How do we conclude that the proposed new ine does not bring new information?
+                     * Keep in mind that we're comparing entries from different tables:
+                     * - existingEntry is from this node's frame of reference
+                     * - tableEntry is from the frame of reference of the node that announced this table to me
+                     * Either if the destination is new, the next hop is new, the file name is new, or the hops to get there have changed
+                     * So if a single one is true, we deem worthy to update
+                     **/
+                    RoutingTableEntry existingEntry = contentRoutingTable.get(fileHash);
+                    boolean equalDestinations = tableEntry.getDstMAC().equals(existingEntry.getDstMAC());
+                    boolean equalNextHop = peerID.equals(existingEntry.getNextHopMAC());
+                    boolean equalFileName = tableEntry.getFileName().equals(existingEntry.getFileName());
+                    boolean equalHopCount = (tableEntry.getHopCount() + 1) == existingEntry.getHopCount(); // Why + 1? The existing table references THIS one, whereas the received table to merge references the neightbour node
+
+                    isChangesMade = (!equalDestinations || !equalNextHop || !equalFileName || !equalHopCount);
+                }
+
+                if (isChangesMade) {
+                    changeCount++;
+
+                    this.addReference(fileHash,
+                            new RoutingTableEntry(tableEntry.getFileName(), // File name is the same
+                                    tableEntry.getDstMAC(),   // Destination is the same
+                                    peerID,                   // The next hop is not the next hop of peer that gave me the table, but that peer itself
+                                    1 + tableEntry.getHopCount())); // The number of hops is incremented because a neighbour gave me HIS table, so mine is 1+ away to destination
+                }
+            }
+        }
+
+        // Recalculate the map's hash is anything changed
+        if (changeCount > 0) {
+            routingTableHash = contentRoutingTable.hashCode();
+        }
+
+        return changeCount;
     }
 
     public String toString() {
@@ -106,16 +146,16 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
         contentRoutingTable.entrySet().removeIf(entry -> isPeerInvolved.test(entry.getValue()));
     }
 
-    public void setVersion(long version) {
-        this.currentTableVersion = version;
+    public Integer getMostRecentHash() {
+        return routingTableHash;
     }
 
-    public void incVersion() {
-        this.currentTableVersion++;
+    public String getOwnerID() {
+        return ownerID;
     }
 
-    public long getCurrentTableVersion() {
-        return currentTableVersion;
+    public Map<String, RoutingTableEntry> getContentRoutingTable() {
+        return contentRoutingTable;
     }
 
     // MAP METHODS

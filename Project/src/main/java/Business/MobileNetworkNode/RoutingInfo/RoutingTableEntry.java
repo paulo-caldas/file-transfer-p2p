@@ -11,14 +11,12 @@ public class RoutingTableEntry implements Serializable {
     private String dstMAC;
     private String nextHopMAC;
     private int hopCount;
-    private long versionOfEntry;
 
-    public RoutingTableEntry(String fileName, String dstMAC, String nextHopMAC, int hopCount, long versionOfEntry) {
+    public RoutingTableEntry(String fileName, String dstMAC, String nextHopMAC, int hopCount) {
         this.fileName = fileName;
         this.dstMAC = dstMAC;
         this.nextHopMAC = nextHopMAC;
         this.hopCount = hopCount;
-        this.versionOfEntry = versionOfEntry;
     }
 
     public String getFileName() { return fileName; }
@@ -49,17 +47,9 @@ public class RoutingTableEntry implements Serializable {
         this.hopCount = hopCount;
     }
 
-    public long getVersion() {
-        return this.versionOfEntry;
-    }
-
-    public void setVersion(long version) {
-        this.versionOfEntry = version;
-    }
-
     @Override
     public String toString() {
-        return "(" + fileName + "," + dstMAC + "," + nextHopMAC + "," + hopCount + "," + versionOfEntry + ")";
+        return "(" + fileName + "," + dstMAC + "," + nextHopMAC + "," + hopCount + ")";
     }
 }
 
