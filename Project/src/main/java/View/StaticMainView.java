@@ -5,6 +5,9 @@ import View.Utilities.Option;
 
 import java.util.Arrays;
 
+/**
+ * Main menu for the user to interface with
+ */
 public class StaticMainView implements StaticTextualView {
 
     private final Menu menu =

@@ -1,5 +1,8 @@
 package View.Utilities;
 
+/**
+ * An option in a textual menu
+ */
 public class Option {
     String descrition;
     String tag; // The tag is the string the user must type to select this options

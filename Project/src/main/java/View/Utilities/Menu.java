@@ -7,10 +7,14 @@ import java.util.stream.Collectors;
 
 import static Business.Utils.repeatStringN;
 
+/**
+ * A textual menu
+ */
 public class Menu {
 
-    private List<Option> options;
     private String title;
+    private List<Option> options;
+    // How many characters wide it is
     private int horizontalSize;
 
     /**
@@ -43,16 +47,15 @@ public class Menu {
     }
 
     private void clearConsole() {
-        // ANSI support
         if (System.getenv().get("TERM") != null) {
+            // For ANSI-enabled terminals
             System.out.print("\033[H\033[2J");
             System.out.flush();
         } else if (System.getProperty("os.name").contains("Windows")) {
+            // For windows terminals
             try {
                 new ProcessBuilder("cmd", "/c", "cls").inheritIO().start().waitFor();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
+            } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
         }
