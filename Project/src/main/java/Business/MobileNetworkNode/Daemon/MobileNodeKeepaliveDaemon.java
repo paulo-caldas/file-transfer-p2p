@@ -1,109 +1,111 @@
 package Business.MobileNetworkNode.Daemon;
 
-import Business.MobileNetworkNode.PeerKeepaliveTable;
 import Business.MobileNetworkNode.MobileNode;
 import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
+import Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry;
 import org.apache.log4j.Logger;
 
-import java.sql.Timestamp;
-import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
+import static Business.Utils.getTimestampOfNow;
 
 /**
- * Daemon responsible for, in behalf of a mobile node, testing for the presence
+ * Daemon responsible for, in behalf of a mobile node, test for the presence
  * of his peers and, if they are unable to prove so, remove them
  */
-public class MobileNodeKeepaliveDaemon implements MobileNodeDaemon {
-    private boolean finished;
-    private final MobileNode representativeNode;
-    private final PeerKeepaliveTable keepaliveTable;
-    private final RoutingTable contentRoutingTable;
-    private Map<String, Integer> hashOfPeersMostRecentContentTable;
+public class MobileNodeKeepaliveDaemon extends MobileNodeDaemon {
+    // How many time does the daemon wait for peers to prove they're alive
+    // Slower the number, more demanding the daemon is for a high quality link (low RTT)
     private final int KEEPAWAY_TIME_MS = 5000;
-    private final int HELLO_FLOODING_PERIODICITY = 3; // every 3 KEEPARAY_TIME_MS, flood with HELLO
+
+    // Log in behalf of the representative node
     private final Logger LOGGER;
 
+    /**
+     * Constructor
+     * @param representativeNode Node that this daemon works in behalf of
+     */
     public MobileNodeKeepaliveDaemon(MobileNode representativeNode) {
-        this.finished = false;
-        this.representativeNode = representativeNode;
-        this.keepaliveTable = representativeNode.getPeerKeepaliveTable();
-        this.contentRoutingTable = representativeNode.getRoutingTable();
-        this.hashOfPeersMostRecentContentTable = representativeNode.getHashOfPeersMostRecentContentTable();
-        this.LOGGER = representativeNode.getLogger();
+        super(representativeNode); // Init all services
+        this.LOGGER = super.getLogger();
     }
 
     @Override
-    public void run () {
-        System.out.println("- Starting keepalive daemon");
-        queryPeers();
+    public void run() {
+        LOGGER.debug("Starting keepalive daemon");
+        monitorPeers();
+        LOGGER.debug("Terminating keepalive daemon");
     }
 
-    @Override
-    public void finish() {
-        finished = true;
-    }
-
-    private void queryPeers() {
-
-        int period = 0;
-
+    private void monitorPeers() {
         try {
-            while (!finished) {
+            while (!super.isFinished()) {
                 pingAllPeers();
-                Thread.sleep(KEEPAWAY_TIME_MS);
+                Thread.sleep(KEEPAWAY_TIME_MS); // Give peers time to pong me as proof they're alive
                 removeDeadPeers();
-
-                if (period++ == HELLO_FLOODING_PERIODICITY) {
-                    // TODO: ping flood?
-                    sendHelloFlood();
-                    period = 0;
-                }
-
             }
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            LOGGER.error("Prematurely terminated");
         }
     }
 
     private void pingAllPeers() {
-        String timestampOfNow = new Timestamp(Calendar.getInstance().getTime().getTime()).toString();
-        synchronized (keepaliveTable) {
-            keepaliveTable.setCurrentKeepaliveSessionID(timestampOfNow);
-            keepaliveTable.getPeers().forEach(peer -> representativeNode.sendPingMessage((String) peer, timestampOfNow) );
-        }
+        // Setting the ID as a timestamp of now prevents outdated responses being accepted
+        String timestampOfNow = getTimestampOfNow();
+        super.setCurrentKeepaliveSessionId(timestampOfNow);
+
+            // Send PING message in broadcast
+            // The peers I know will pong back, the ones I don't know introduce themselves
+            super.sendPingMessage(LINK_BROADCAST.toString(), timestampOfNow);
     }
 
     private void removeDeadPeers() {
         List<String> removedPeers;
 
-        // Temove idle peers from the keepalive table
-        synchronized (keepaliveTable) {
-            removedPeers = keepaliveTable.applyStrikeWave();
+        // Method applyStrikeWave sees who failed to prove they're alive,
+        // and removes those that failed too many times in a row
+        removedPeers = super.applyStrikeWaveOnMonitorizedPeers();
+
+        boolean wereAnyPeersRemoved = removedPeers.size() > 0;
+
+        String versionBeforeRemoval = super.getTableVersion();
+
+        if (wereAnyPeersRemoved) {
+            Map<String, Set<RoutingTableEntry>> pathsRemoved = new HashMap<>();
+
+            // The previous method returns all the peers that were removed
+            // All that is left is to remove all references of those peers
+            // From the content table
+            for (String removedPeer : removedPeers) {
+                Map<String, Set<RoutingTableEntry>> removedTable = super.removeAllReferencesOfPeer(removedPeer);
+
+                for (Map.Entry<String, Set<RoutingTableEntry>> removedPaths : removedTable.entrySet()) {
+                    String fileHash = removedPaths.getKey();
+
+                    if (!pathsRemoved.containsKey(fileHash)) {
+                        pathsRemoved.put(fileHash, removedPaths.getValue());
+                    } else {
+                        Set<RoutingTableEntry> pathsToRemoveAlreadyKnown = pathsRemoved.get(fileHash);
+                        pathsToRemoveAlreadyKnown.addAll(removedPaths.getValue());
+                        pathsRemoved.put(fileHash, pathsToRemoveAlreadyKnown);
+                    }
+                }
+
+                RoutingTable singleRemoveInstruction = new RoutingTable(removedPeer, removedTable);
+                // FIXME: incorrect values
+                singleRemoveInstruction.setPreviousVersion(versionBeforeRemoval);
+                singleRemoveInstruction.setVersion(super.getTableVersion());
+
+                // New changes were made, send them out to peers (similarly to distance vector protocol RIP)
+                super.sendRemoveUpdate(singleRemoveInstruction, getTimestampOfNow());
+            }
+
+            LOGGER.info("Removed peers: " + removedPeers.toString());
         }
-
-        // The previous method returns all the peers that were removed
-        // All that is left is to remove all references of those peers
-        // From the content table
-        removedPeers.forEach(peer -> {
-            synchronized (contentRoutingTable) {
-                contentRoutingTable.removePeer(peer);
-            }
-            synchronized (hashOfPeersMostRecentContentTable) {
-                hashOfPeersMostRecentContentTable.remove(peer);
-            }
-
-        });
-
-        LOGGER.info("Removed peers: " + removedPeers.toString());
-    }
-
-    private void sendHelloFlood() {
-        representativeNode.sendHelloMessage(MobileNode.AddressType.LINK_MULTICAST.toString());
-    }
-
-    private void sendPingFlood() {
-        representativeNode.sendPingMessage(MobileNode.AddressType.LINK_MULTICAST.toString(), "-1");
     }
 }
 
