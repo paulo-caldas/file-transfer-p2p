@@ -6,23 +6,31 @@ import java.util.*;
 
 import Business.MobileNetworkNode.Daemon.MobileNodeKeepaliveDaemon;
 import Business.MobileNetworkNode.Daemon.MobileNodeListeningDaemon;
+import Business.MobileNetworkNode.DataCache.FileFragment;
+import Business.MobileNetworkNode.DataCache.FileFragmentTable;
+import Business.MobileNetworkNode.RoutingInfo.PeerKeepaliveTable;
 import Business.MobileNetworkNode.RoutingInfo.RoutingTable;
 import Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry;
-import Business.PDU.HelloMobileNetworkPDU;
-import Business.PDU.MobileNetworkPDU;
+import Business.PDU.*;
 
-import Business.PDU.RequestContentMobileNetworkPDU;
-import Business.PDU.ResponseContentMobileNetworkPDU;
 import Business.Utils;
 import View.DynamicContentSearchResultsView;
 import View.StaticMainView;
 import View.Utilities.Menu;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
-import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID;
-import static Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.*;
-import static Business.PDU.MobileNetworkPDU.STANDARD_TTL;
 
+import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
+import static Business.PDU.MobileNetworkPDU.ContentType.*;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID;
+import static Business.PDU.MobileNetworkPDU.STANDARD_TTL;
+import static Business.Utils.getTimestampOfNow;
+
+/**
+ * A member of a mobile P2P network
+ * Has methods to do certain functionalities (such as sending or receiving messages)
+ * Has autonomousStart method that runs by itself (with help of daemons) and presents a textual interface
+ */
 public class MobileNode {
 
     public enum AddressType {
@@ -47,32 +55,41 @@ public class MobileNode {
         }
     }
 
-    private final Logger LOGGER = Logger.getLogger(MobileNode.class);
-
+    // Sockets to receive and send messages
     private MulticastSocket receiveServerSocket;
     private MulticastSocket sendServerSocket;
 
-    private DatagramPacket receivePacket;
-
+    // Connection-related variables
     private String macAddr;
     private InetAddress group;
     private Integer port;
 
-    private RoutingTable contentRoutingTable;
-    private PeerKeepaliveTable<String, String> peerKeepaliveTable;
-    private Map<String, Integer> hashOfPeersMostRecentContentTable;
+    // If dividing a file into UDP-sendable chunks, this is the size of each chunk
+    private final int FILE_CHUNK_SIZE_BYTES = 3000;
 
-    private Integer currentHelloSessionID;
+    // Logger to log information into a file
+    private final Logger LOGGER = Logger.getLogger(MobileNode.class);
 
+    // For reading user input
     private Scanner scanner;
 
-    public Logger getLogger() { return LOGGER; }
-    public String getMacAddr() { return macAddr; }
-    public RoutingTable getRoutingTable() { return contentRoutingTable; }
-    public PeerKeepaliveTable getPeerKeepaliveTable() { return peerKeepaliveTable; }
-    public Map<String, Integer> getHashOfPeersMostRecentContentTable() { return hashOfPeersMostRecentContentTable; }
-    public MulticastSocket getReceiveServerSocket() { return this.receiveServerSocket; }
-    public DatagramPacket getReceivePacket() { return this.receivePacket; }
+    /**
+     * Data structures
+     */
+
+    // Maps a file's id (hash) to a list of lines on this table. Each line is a possible route to retrieve that content
+    private RoutingTable contentRoutingTable;
+
+    // Structure that allows to keep track on what peers are responding to keepalive messages.
+    // If one doesn't reply in time too many times in a row, he's removed and
+    private PeerKeepaliveTable<String, String> peerKeepaliveTable;
+
+    // Maping a peer's ID to the most recent cached version of their routing table
+    // Useful to quickly realize if I'm already updated on a user
+    private Map<String, String> hashOfPeersMostRecentContentTable;
+
+    // Map a file hash to a list of gathered fragments
+    private FileFragmentTable<String> cacheOfFragmentedFiles;
 
     public MobileNode(File sharingDirectory) throws IOException{
         if (! (sharingDirectory.exists() && sharingDirectory.isDirectory())) {
@@ -86,40 +103,53 @@ public class MobileNode {
             group = InetAddress.getByName(AddressType.NETWORK_MULTICAST.toString());
             port = Integer.parseInt(AddressType.LISTENING_PORT.toString());
             macAddr = Utils.macByteArrToString(eth0.getHardwareAddress());
-            currentHelloSessionID = 0;
 
-            // Setting up logger
+            // Setting up logger by importing log4j.xml config file
             System.setProperty("logfile.name", macAddr + "_MobileNodeLog.xml");
             DOMConfigurator.configure("log4j.xml");
 
             LOGGER.info("Sharing directory: " + sharingDirectory.getCanonicalPath());
 
-            // Populating content sharing table with all files inside the sharind directory folder passed by argument
+            // Populating content sharing table with all files inside the sharing directory folder passed by argument
             contentRoutingTable = new RoutingTable(this.macAddr);
+
+            // Saving files in a cache that splits them into pieces
+            cacheOfFragmentedFiles = new FileFragmentTable<>();
 
             List<File> filesInPath = Utils.getFilesInsidePath(sharingDirectory);
             filesInPath.forEach(( file ->  {
                 LOGGER.info("Indexing file: " + file.getName());
                 try {
+
+                    String key = Utils.hashFile(file, "md5");
+
                     synchronized (contentRoutingTable) {
-                        contentRoutingTable.addOwnedReference(file);
+                        // Add to my routing table the entry that i know, 0 hops away, my own file
+                        contentRoutingTable.addOwnedReference(key, file);
                     }
+
+                    synchronized (cacheOfFragmentedFiles) {
+                        // Add to cache the fragmented pieces of my local file
+                        cacheOfFragmentedFiles.insertFile(key, file, FILE_CHUNK_SIZE_BYTES);
+                    }
+
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             } ));
 
             // Setting up the table to help keep count of what peers did not prove they're alive
-            peerKeepaliveTable = new PeerKeepaliveTable("n/a", 3);
+            // Max number of times they can fail to prove they're alive in a row before being removed: 3
+            peerKeepaliveTable = new PeerKeepaliveTable<>("n/a", 3);
 
             // Setting up to table to help keep track of the hash of the last content table that we used (so we dont keep updating information we already know of)
             hashOfPeersMostRecentContentTable = new HashMap<>();
 
-            // Setting up sockets and packets, needed for UDP communication
+            // Setting up sockets, needed for UDP communication
             receiveServerSocket = new MulticastSocket(port);
+            // Listening socket joins the multicast group associated with the mobile network
             receiveServerSocket.joinGroup(new InetSocketAddress(group, port), eth0);
             sendServerSocket = new MulticastSocket(port);
-            receivePacket = new DatagramPacket(new byte[2048], 2048);
 
             scanner = new Scanner(System.in);
         } catch (Exception e) {
@@ -127,11 +157,40 @@ public class MobileNode {
         }
     }
 
-    public void autonamousStart() throws InterruptedException {
+    public Logger getLogger() {
+        return LOGGER;
+    }
+
+    public String getMacAddr() {
+        return macAddr;
+    }
+
+    public RoutingTable getRoutingTable() {
+        return contentRoutingTable;
+    }
+
+    public PeerKeepaliveTable<String, String> getPeerKeepaliveTable() {
+        return peerKeepaliveTable;
+    }
+
+    public Map<String, String> getHashOfPeersMostRecentContentTable() {
+        return hashOfPeersMostRecentContentTable;
+    }
+
+    public FileFragmentTable<String> getCachefFragmentedFiles() {
+        return cacheOfFragmentedFiles;
+    }
+
+    /**
+     * Execute the node's behaviour and present the user with a textual interface.
+     * The behaviour stops when the user signals to quit
+     * @throws InterruptedException When one or more of the daemon threads get interrupted
+     */
+    public void autonomousStart() throws InterruptedException {
         LOGGER.debug("Starting mobile node process");
 
         // Initialize into the network by announcing everyone your presence
-        sendHelloMessage(AddressType.LINK_MULTICAST.toString());
+        sendHelloMessage(AddressType.LINK_MULTICAST.toString(), getTimestampOfNow());
 
         // Listens for incoming messages
         MobileNodeListeningDaemon mobileNodeListeningDaemon = new MobileNodeListeningDaemon(this);
@@ -158,9 +217,9 @@ public class MobileNode {
         mobileNodeKeepAliveDaemonThread.join();
 
         LOGGER.debug("Finished mobile node process");
+        LOGGER.debug(getStatistics());
 
-        logNodeInfo();
-
+        // Inform user on where the log files can be reached
         System.out.println("Info logged in " + macAddr + "_MobileNodeLog.xml");
     }
 
@@ -169,140 +228,321 @@ public class MobileNode {
         String option;
         do {
             menu.show();
-            option = new Scanner(System.in).nextLine().toUpperCase();
+            option = scanner.nextLine().toUpperCase();
             switch(option) {
                 case "D" : downloadInteraction();
-                           break;
+                    break;
                 case "E": System.out.println("Leaving...");
-                          break;
+                    break;
                 default: break;
             }
         } while(!option.equals("E"));
     }
 
     private void downloadInteraction() {
-        // First ask for user to input the name of the file (
+        // First ask for user to input a query string (much like a search engine)
         System.out.print("Type names to query for(Enter for all):");
         String queryString = scanner.nextLine();
 
         // search in local routing table for files with similar name
-
-        List<Map.Entry<String,RoutingTableEntry>> matchingEntries;
+        Map<String,Set<RoutingTableEntry>> matchingEntriesMap;
         synchronized (contentRoutingTable) {
-            matchingEntries = contentRoutingTable.similarFileNameSearch(queryString);
+            matchingEntriesMap = contentRoutingTable.similarFileNameSearch(queryString);
+        }
+
+        // Auxiliary structure that maps a name to the corresponding filehash
+        Map<String, String> fileHashMap = new HashMap<>();
+
+        // Parse into a single list, where each entry is a line in user menu
+        List<RoutingTableEntry> matchingEntriesInList = new ArrayList<>();
+
+        // Populate the previous two auxiliary structures
+        for (Map.Entry<String, Set<RoutingTableEntry>> entry : matchingEntriesMap.entrySet()) {
+            String fileHash = entry.getKey();
+            Set<RoutingTableEntry> knownPathsForHash = entry.getValue();
+            knownPathsForHash.forEach(path -> fileHashMap.put(path.getFileName(), fileHash));
+            matchingEntriesInList.addAll(knownPathsForHash);
         }
 
         // show user the results and ask him to search for one
         DynamicContentSearchResultsView contentSearchResultsView = new DynamicContentSearchResultsView();
 
-        matchingEntries.stream()
-                       .sorted(Comparator.comparingInt(entry -> entry.getValue().getHopCount()))
-                       .forEach(tableEntry -> contentSearchResultsView.addOption(tableEntry.getValue()));
+        // Interface gives visibility priority to content less hops away
+        matchingEntriesInList.sort(RoutingTableEntry::compareTo);
+
+        matchingEntriesInList.stream().forEach(contentSearchResultsView::addOption);
 
         Menu menu = contentSearchResultsView.getMenu();
+        boolean fileItemChosen = false;
         String option;
+        int optionInt;
         do {
             menu.show();
-            option = new Scanner(System.in).nextLine().toUpperCase();
+            option = scanner.nextLine().toUpperCase();
 
             // Check if a number was added as input
-            if (option.matches("-?(0|[1-9]\\d*)")) {
-                int optionInt = Integer.parseInt(option);
-                byte[] content = getContent(matchingEntries.get(optionInt).getKey());
+            if ((option.matches("(0|\\d+)")) && ((optionInt = Integer.parseInt(option)) < matchingEntriesInList.size())) {
+
+                String requestedFileName = matchingEntriesInList.get(optionInt).getFileName();
+                String requestedFileHash = fileHashMap.get(requestedFileName);
+
+                requestContentFromSingleNode(requestedFileHash);
+
+                fileItemChosen = true;
             }
 
-        } while(!option.equals("E"));
+        } while(!option.equals("E") && !fileItemChosen);
     }
 
-    private byte[] getContent(String fileHash) {
-        RoutingTableEntry entry;
+    private void requestContentFromSingleNode(String requestedFileHash) {
+        RoutingTableEntry path;
 
         synchronized(contentRoutingTable) {
-           entry = contentRoutingTable.get(fileHash);
+            try {
+                path = contentRoutingTable.getBestHopCountEntry(requestedFileHash);
+            } catch ( NullPointerException e) {
+                LOGGER.error("Couldn't find path for requested file");
+                return;
+            }
         }
 
-        String destinationMAC = entry.getDstMAC();
-        String nextHopMAC = entry.getNextHopMAC();
-        int hopCount = entry.getHopCount();
+        if (path.getHopCount() == 0) {
+            // Don't download a file we have stored locally...
 
-        sendRequestContentMessage(destinationMAC, nextHopMAC, hopCount, fileHash);
+            return;
+        }
 
-        return null;
+        String destination = path.getDstMAC();
+        String nextHop = path.getNextHopMAC();
+        int hopCount = path.getHopCount();
+        sendRequestContentMessage(destination,nextHop,hopCount, getTimestampOfNow(), requestedFileHash);
     }
 
-    public void sendHelloMessage(String dstMac) {
-        MobileNetworkPDU helloPacket = new HelloMobileNetworkPDU(
+    public MobileNetworkPDU capturePDU() throws IOException, ClassNotFoundException {
+        DatagramPacket receivePacket = new DatagramPacket(new byte[10000], 10000);
+        receiveServerSocket.receive(receivePacket);
+        byte[] data = receivePacket.getData();
+        ByteArrayInputStream in = new ByteArrayInputStream(data);
+        ObjectInputStream objectInputStream = new ObjectInputStream(in);
+        MobileNetworkPDU pdu = (MobileNetworkPDU) objectInputStream.readObject();
+
+        return pdu;
+    }
+
+    public void sendHelloMessage(String dstMac, String timestamp) {
+        // hellos only happen on a single-hop basis
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(LINK_BROADCAST.toString());
+
+        MobileNetworkPDU helloPacket = new DataResponseMobileNetworkPDU(
                 macAddr,
                 dstMac,
-                HELLO,
                 VALID,
                 STANDARD_TTL,
-                String.valueOf(currentHelloSessionID),
+                timestamp,
+                nodePath,
+                ROUTING_TABLE,
+                new String[0], // No params used in hello messages
                 contentRoutingTable);
+
+        LOGGER.debug("Sending(HELLO): " + helloPacket.toString());
+
         sendPDU(helloPacket);
-        currentHelloSessionID++;
     }
 
-    public void sendPingMessage(String dstMac, String sessionID) {
-        MobileNetworkPDU pingPacket = new MobileNetworkPDU(
+    public void sendPingMessage(String dstMac, String timestamp) {
+        // pongs only happen on a single-hop basis
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(LINK_BROADCAST.toString());
+
+        MobileNetworkPDU pingPacket = new DataRequestMobileNetworkPDU(
                 macAddr,
                 dstMac,
-                PING,
                 VALID,
                 STANDARD_TTL,
-                sessionID);
+                timestamp,
+                nodePath,
+                ROUTING_TABLE_VERSION,
+                new String[0]);
+
+        LOGGER.debug("Sending(PING): " + pingPacket.toString());
+
         sendPDU(pingPacket);
     }
 
-    public void sendPongMessage(String dstMac, String sessionID) {
-        MobileNetworkPDU pongPacket = new MobileNetworkPDU(
+    public void sendPongMessage(String dstMac, String timestamp, String routingTableVersion) {
+        // pongs only happen on a single-hop basis
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(LINK_BROADCAST.toString());
+
+        MobileNetworkPDU pongPacket = new DataResponseMobileNetworkPDU(
                 macAddr,
                 dstMac,
-                PONG,
                 VALID,
                 STANDARD_TTL,
-                sessionID);
+                timestamp,
+                nodePath,
+                ROUTING_TABLE_VERSION,
+                new String[0], // No params in pong message
+                routingTableVersion
+        );
+
+        LOGGER.debug("Sending(PONG): " + pongPacket.toString());
+
         sendPDU(pongPacket);
     }
 
-    public void sendRequestContentMessage(String dstMac, String nextHopMAC, int hopCount, String fileHash) {
-        String[] nodePath = new String[hopCount + 1]; // If a path has N hops (or archs), it has N+1 nodes along the path
-        nodePath[0] = macAddr; // The first node is the origin of the request message
-        nodePath[1] = nextHopMAC; // The last node is always the next hop the request is routed to
+    public void sendRemoveUpdate(RoutingTable removedTable, String timestamp) {
+        // send remove updates only happen on a single-hop basis
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(LINK_BROADCAST.toString());
 
-        RequestContentMobileNetworkPDU requestContentMobileNetworkPDU = new RequestContentMobileNetworkPDU(
-               macAddr,
-               dstMac,
-               REQUEST_CONTENT,
-               VALID,
-               STANDARD_TTL,
-               fileHash,
-               nodePath);
-        sendPDU(requestContentMobileNetworkPDU);
+        MobileNetworkPDU removeUpdatePacket = new DataResponseMobileNetworkPDU(
+                macAddr,
+                LINK_BROADCAST.toString(),
+                VALID,
+                STANDARD_TTL,
+                timestamp,
+                nodePath,
+                ROUTING_TABLE_DELETION_UPDATE,
+                new String[0], // No params in updates
+                removedTable
+        );
+        LOGGER.debug("Sending(UPDT_REM): " + removeUpdatePacket.toString());
+
+        sendPDU(removeUpdatePacket);
     }
 
-    public void respondToRequestContent(RequestContentMobileNetworkPDU pdu) {
-        String[] nodePath = pdu.getNodePath();
-        String peerIDOfRequester = nodePath[0];
+    public void sendInsertUpdate(RoutingTable insertedTable, String timestamp) {
+        // send insert updates only happen on a single-hop basis
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(LINK_BROADCAST.toString());
+
+        MobileNetworkPDU removeUpdatePacket = new DataResponseMobileNetworkPDU(
+                macAddr,
+                LINK_BROADCAST.toString(),
+                VALID,
+                STANDARD_TTL,
+                timestamp,
+                nodePath,
+                ROUTING_TABLE_INSERTION_UPDATE, // No params in updates
+                new String[0],
+                insertedTable
+        );
+        LOGGER.debug("Sending(UPDT_INSRT): " + removeUpdatePacket.toString());
+
+        sendPDU(removeUpdatePacket);
+    }
+
+    public void sendRequestContentMessage(String dstMac, String nextHopMAC, int maxHopCount, String timestamp, String fileHash) {
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(nextHopMAC);
+
+        String[] params = new String[1];
+        params[0] = fileHash;
+
+        MobileNetworkPDU requestContentPacket = new DataRequestMobileNetworkPDU(
+                macAddr,
+                dstMac,
+                VALID,
+                STANDARD_TTL,
+                timestamp,
+                nodePath,
+                FILE,
+                params);
+
+        LOGGER.debug("Sending(REQ_FILE): " + requestContentPacket.toString());
+
+        sendPDU(requestContentPacket);
+    }
+
+    public void sendResponseFileMessage(DataRequestMobileNetworkPDU requestItRespondsTo, FileFragment fragment, String[] params) {
+        String requestSessionID = requestItRespondsTo.getSessionID();
+        Stack<String> nodePath = requestItRespondsTo.getNodePath();
+        String peerIDOfRequester = nodePath.get(0);
 
         // A node path was made whilst the request message was routed
         // To reply, simply pop the last element (which should be our node), and forward the message back
+        nodePath.pop();
 
-        String[] poppedNodePath = Arrays.copyOf(nodePath, nodePath.length - 1);
-
-        ResponseContentMobileNetworkPDU responsePDU = new ResponseContentMobileNetworkPDU(
+        MobileNetworkPDU responseFileMessage = new DataResponseMobileNetworkPDU(
                 macAddr,
                 peerIDOfRequester,
-                RESPONSE_CONTENT,
                 VALID,
                 STANDARD_TTL,
-                pdu.getSessionID(),
-                poppedNodePath,
-                "Teste!!");
-        sendPDU(responsePDU);
+                requestSessionID,
+                nodePath,
+                FILE,
+                params,
+                fragment);
+
+        LOGGER.debug("Sending(RESPONSE_FILE): " + responseFileMessage.toString());
+
+        sendPDU(responseFileMessage);
     }
 
-    void sendPDU(MobileNetworkPDU pdu) {
+    public void sendHelloRequest(String dstMac, String timestamp) {
+        Stack<String> nodePath = new Stack<>();
+        nodePath.push(macAddr);
+        nodePath.push(dstMac);
+
+        MobileNetworkPDU requestContentPacket = new DataRequestMobileNetworkPDU(
+                macAddr,
+                dstMac,
+                VALID,
+                STANDARD_TTL,
+                timestamp,
+                nodePath,
+                ROUTING_TABLE,
+                new String[0]); // Hell request has no params
+
+        LOGGER.debug("Sending(REQ_HELLO): " + requestContentPacket.toString());
+
+        sendPDU(requestContentPacket);
+    }
+
+
+    public void forwardResponseContentPacket(DataResponseMobileNetworkPDU responsePDU) {
+        Stack<String> nodePath = responsePDU.getNodePath();
+
+        // Pop the next hop (because that's me and I'm already looking at it)
+        nodePath.pop();
+
+        // Only the next hop changed, re-send message
+        this.sendPDU(responsePDU);
+    }
+
+    public void forwardRequestContentPacket(DataRequestMobileNetworkPDU requestPDU) {
+        String messageDestination = requestPDU.getDstMAC();
+
+        try {
+            String nextHop;
+            synchronized (contentRoutingTable) {
+                nextHop = contentRoutingTable.getNextPeerHop(messageDestination);
+            }
+
+            Stack<String> nodePath = requestPDU.getNodePath();
+
+            // Look to the first empty value in array and push the new next hop
+            nodePath.push(nextHop);
+
+            // Only the next hop changed, re-send message
+            LOGGER.info("Forwarding (to " + nextHop + "):" + requestPDU.toString());
+
+            this.sendPDU(requestPDU);
+        } catch (NullPointerException e) {
+            // TODO: Send error message "cant route"
+        }
+    }
+
+    public void sendPDU(MobileNetworkPDU pdu) {
+        // Send the pdu as a byte array
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             ObjectOutputStream os = new ObjectOutputStream(outputStream);
@@ -315,21 +555,21 @@ public class MobileNode {
             DatagramPacket sendPacket = new DatagramPacket(buffer, buffer.length, group, port);
             sendPacket.setData(buffer);
             sendServerSocket.send(sendPacket);
-
-            LOGGER.debug("Sent: " + pdu.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void logNodeInfo() {
-        String nodeInfo = String.format("STATISTICS: \n-Mac address: %s \n-Routing table \n %s \n-Peer Keepalive table\n %s \n-Hello session id: %s",
+    private String getStatistics() {
+        String nodeInfo = String.format("STATISTICS: \n-Mac address: %s \n-Routing table \n %s \n-Peer Keepalive table\n %s",
                 macAddr,
                 contentRoutingTable.toString(),
-                peerKeepaliveTable.toString(),
-                currentHelloSessionID);
+                peerKeepaliveTable.toString());
 
-        LOGGER.debug(nodeInfo);
+        return nodeInfo;
     }
 
+    public void closeReceiveSocket() {
+        this.receiveServerSocket.close();
+    }
 }
