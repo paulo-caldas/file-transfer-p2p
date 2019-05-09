@@ -1,2 +1,4 @@
-Correctly route messages not meant to you
-ponder ping flood instead of hello flood
+cache fragments that pass by you
+multi-metric line requests
+multi-host download
+download timeout
