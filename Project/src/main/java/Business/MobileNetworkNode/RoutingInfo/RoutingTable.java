@@ -1,110 +1,304 @@
 package Business.MobileNetworkNode.RoutingInfo;
 
-import Business.Utils;
-
 import java.io.File;
-import java.io.IOException;
 import java.io.Serializable;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static Business.MobileNetworkNode.RoutingInfo.RoutingTableEntry.EntryTypes.NULL_ENTRY;
+import static Business.Utils.getTimestampOfNow;
 
-public class RoutingTable implements Map<String, RoutingTableEntry>, Serializable {
+/**
+ * Class that encapsulates all the routing information necessary for a node to retrieve content
+ * and communicate with peers
+ */
+public class RoutingTable implements Map<String, Set<RoutingTableEntry>>, Serializable {
 
+    // ID of the node that owns this table (useful when this class gets shared with other peers)
     private String ownerID;
-    private Integer routingTableHash; // hash of the most recent version of the routing table, used so peers can know if they already know about it or not
-    private Map<String, RoutingTableEntry> contentRoutingTable; // Key is file hash
 
+    // Version of the routing table (Can be timestamp, incremented version, hash, etc)
+    // Useful so peers can immediately identify if they are already updated on a peer's routing info
+    // Previous version is also checked so when we give someone a table and say "add this to your existing
+    // table", version says the new version, and previousVersion says what version this refers to
+    private String previousVersion;
+    private String version;
+
+    // Map a file's identifier (it's hash) to a list of lines in the routing table (Each line is a possible path to take)
+    private Map<String, Set<RoutingTableEntry>> contentRoutingTable;
+
+    /**
+     * Constructor
+     * @param ownerID ID of the owner of this routing table
+     */
     public RoutingTable(String ownerID) {
         this.ownerID = ownerID;
         this.contentRoutingTable = new HashMap<>();
-        this.routingTableHash = 0;
+        this.previousVersion = getTimestampOfNow();
+        this.version = this.previousVersion;
     }
 
-    public void addOwnedReference(File file) throws IOException, NoSuchAlgorithmException {
-        String fileHash = Utils.hashFile(file, "md5");
-        contentRoutingTable.put(fileHash,
+    public RoutingTable(String ownedID, Map<String, Set<RoutingTableEntry>> table) {
+        this.ownerID = ownedID;
+        this.contentRoutingTable = table;
+        this.previousVersion = "n/a";
+        this.version = "n/a";
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public String getPreviousVersion() {
+        return previousVersion;
+    }
+
+    public String getOwnerID() {
+        return ownerID;
+    }
+
+    public void setPreviousVersion(String version) {
+        this.previousVersion = version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public void setOwner(String peerID) {
+        this.ownerID = peerID;
+    }
+
+
+    public Map<String, Set<RoutingTableEntry>> getContentRoutingTable() {
+        return contentRoutingTable;
+    }
+
+    /**
+     * Add a reference to a file that the node owns locally
+     * @param file File to add
+     */
+    public void addOwnedReference(String fileHash, File file) {
+        boolean tableChanged = false;
+
+        Set<RoutingTableEntry> knownPaths;
+
+        if (contentRoutingTable.containsKey(fileHash)) {
+            knownPaths = contentRoutingTable.get(fileHash);
+        } else {
+            knownPaths = new TreeSet<>();
+        }
+
+        Set<String> members = new HashSet<>();
+
+        members.add(this.ownerID);
+
+        RoutingTableEntry localTableEntry =
                 new RoutingTableEntry(file.getName(),
                         ownerID,
-                        NULL_ENTRY.toString(),
-                        0));
+                        NULL_ENTRY.toString(), // there is no next hop, since the file is stored locally
+                        0,
+                        members); // There are no hops to take, since the file is stored locally
+
+        tableChanged |= knownPaths.add(localTableEntry);
+
+        contentRoutingTable.put(fileHash, knownPaths);
+
+        if (tableChanged) {
+            updateVersion();
+        }
     }
 
-    public void addReference(String fileHash, RoutingTableEntry entry) {
-        contentRoutingTable.put(
-                fileHash,
-                new RoutingTableEntry(
-                        entry.getFileName(),
-                        entry.getDstMAC(),
-                        entry.getNextHopMAC(),
-                        entry.getHopCount()));
-    }
+    public boolean addEntries(RoutingTable pathsToAdd) {
 
-    public int joinTable(RoutingTable table) {
-        int changeCount = 0;
-        String peerID = table.getOwnerID();
-        Map<String, RoutingTableEntry> peerContentRoutingTable = table.getContentRoutingTable();
+        // Ignore updates I gave to other people (redundant not to)
 
-        for (Map.Entry<String, RoutingTableEntry> entry : peerContentRoutingTable.entrySet()) {
-            boolean isChangesMade = false;
+        if (pathsToAdd.ownerID.equals(this.ownerID)) {
+            return false;
+        }
+
+        boolean tableChanged = false;
+
+        for (Map.Entry<String, Set<RoutingTableEntry>> entry : pathsToAdd.entrySet()) {
+
             String fileHash = entry.getKey();
-            RoutingTableEntry tableEntry = entry.getValue();
-            RoutingTableEntry existingEntry = null;
+            Set<RoutingTableEntry> paths = entry.getValue();
 
-            // Ignore entries where I am the destination in question or the next hop (somewhat of a local split-horizon)
-            // AKA 'do not tell me about a path regarding my local files nor a path where i am a member of
-            if (!tableEntry.getDstMAC().equals(ownerID) && !tableEntry.getNextHopMAC().equals(ownerID)) {
+            Set<RoutingTableEntry> knownPaths;
+            if (!contentRoutingTable.containsKey(fileHash)) {
+                knownPaths = new TreeSet<>();
+            } else {
+                knownPaths = contentRoutingTable.get(fileHash);
+            }
 
-                if (!contentRoutingTable.containsKey(fileHash)) {
-                    isChangesMade = true;
+            boolean newAdditions = knownPaths.addAll(paths);
+            tableChanged |= newAdditions;
 
-                } else {
-                    /**
-                     * A new line already exists in the table refering to that file hash...
-                     * How do we conclude that the proposed new one does not bring new information?
-                     * Keep in mind that we're comparing entries from different tables:
-                     * - existingEntry is from this node's frame of reference
-                     * - tableEntry is from the frame of reference of the node that announced this table to me
-                     * At the moment, the strategy is to keep a single reference to a file (because in the future, fileHash will be the hash of a chunk, not the entire file).
-                     * As such, we update the existing one if it is referencing the same next hop, but with new information
-                     * Either if the destination is new, the next hop is new, the file name is new, or the hops to get there have changed
-                     * So if a single one is true, we deem worthy to update
-                     **/
-                    existingEntry = contentRoutingTable.get(fileHash);
-                    boolean equalDestinations = tableEntry.getDstMAC().equals(existingEntry.getDstMAC());
-                    boolean equalNextHop = peerID.equals(existingEntry.getNextHopMAC());
-                    boolean equalFileName = tableEntry.getFileName().equals(existingEntry.getFileName());
-                    boolean equalHopCount = (tableEntry.getHopCount() + 1) == existingEntry.getHopCount(); // Why + 1? The existing table references THIS one, whereas the received table to merge references the neightbour node
+            contentRoutingTable.put(fileHash, knownPaths);
+        }
 
-                    // We consider updating the table regarding a file hash if
-                    isChangesMade = (equalNextHop // the new entry references the SAME neighbour (We choose to have only a single neighbour updating us on a file)
-                                     && (!equalDestinations || !equalFileName || !equalHopCount)); // and something about the entry changes
+        if (tableChanged) {
+            updateVersion();
+        }
 
-                }
+        return tableChanged;
+    }
 
-                if (isChangesMade) {
-                    changeCount++;
-                    RoutingTableEntry newEntry =
-                            new RoutingTableEntry(tableEntry.getFileName(), // File name is the same
-                                    tableEntry.getDstMAC(),   // Destination is the same
-                                    peerID,                   // The next hop is not the next hop of peer that gave me the table, but that peer itself
-                                    1 + tableEntry.getHopCount()); // The number of hops is incremented because a neighbour gave me HIS table, so mine is 1+ away to destination
+    public RoutingTableEntry getBestHopCountEntry(String fileHash) throws NullPointerException {
+        return contentRoutingTable.get(fileHash)
+                .stream()
+                .max(Comparator.comparingInt(RoutingTableEntry::getHopCount))
+                .orElseThrow(NullPointerException::new);
+    }
 
-                    this.addReference(fileHash, newEntry);
+    public String getNextPeerHop(String destination) throws NullPointerException {
+        for (Set<RoutingTableEntry> entries : contentRoutingTable.values()) {
+            for (RoutingTableEntry entry : entries) {
+                if (entry.getDstMAC().equals(destination)) {
+                    return entry.getNextHopMAC();
                 }
             }
         }
+        throw new NullPointerException();
+    }
 
-        // Recalculate the map's hash is anything changed
-        if (changeCount > 0) {
-            routingTableHash = contentRoutingTable.hashCode();
+    /**
+     * Get a list of routing entries where the related filename is similar to a query name
+     * @param queryString String to look for
+     * @return
+     */
+    public Map<String,Set<RoutingTableEntry>> similarFileNameSearch(String queryString) {
+        // Split the querystring into space-separated words
+        String[] formatedSpaceSeparatedParams = queryString.split(" ");
+        for (int i = 0; i < formatedSpaceSeparatedParams.length; i++) {
+            formatedSpaceSeparatedParams[i] = formatedSpaceSeparatedParams[i].toLowerCase();
         }
 
-        return changeCount;
+        // Given a routing table entry, look how many matches of "spaceSeparatedParams" we get in it's file name
+        Function<RoutingTableEntry, Function<String[], Integer>> wordsInCommon =
+                entry -> words -> {
+                    int count = 0;
+                    String fileName = entry.getFileName();
+                    for (String word : words) {
+                        if (fileName.toLowerCase().contains(word)) {
+                            count++;
+                        }
+                    }
+                    return count;
+                };
+
+        // From a set of entries in a routing table, retrieve only those whose file name
+        // is similar to a list of words
+        Function<Set<RoutingTableEntry>, Function<String[], Set<RoutingTableEntry>>> getOnlyFileNameMatches =
+                entries -> words -> {
+                    Set<RoutingTableEntry> matches = new TreeSet<>();
+
+                    for (RoutingTableEntry entry : entries) {
+
+                        // If at least one word matches
+                        if (wordsInCommon.apply(entry).apply(words) > 0) {
+                            matches.add(entry);
+                        }
+                    }
+
+                    return matches;
+                };
+
+        Map<String, Set<RoutingTableEntry>> matches = new HashMap<>();
+
+        for (Map.Entry<String, Set<RoutingTableEntry>> entry : contentRoutingTable.entrySet()) {
+            Set<RoutingTableEntry> matchesWithSimilarName = getOnlyFileNameMatches.apply(entry.getValue()).apply(formatedSpaceSeparatedParams);
+
+            matches.put(entry.getKey(), matchesWithSimilarName);
+        }
+
+        return matches;
+    }
+
+    public Map<String, Set<RoutingTableEntry>> removeEntriesWithNextHop(String peerID) {
+        Map<String, Set<RoutingTableEntry>> removedTable = new HashMap<>();
+
+        // Not communicating with peer anymore aka remove entries where i trust him to be next hop
+        Predicate<RoutingTableEntry> isPeerInvolved = entry -> entry.getNextHopMAC().equals(peerID);
+
+        for (Map.Entry<String, Set<RoutingTableEntry>> paths : contentRoutingTable.entrySet()) {
+            String fileHash = paths.getKey();
+            Set<RoutingTableEntry> allPaths = paths.getValue();
+            Set<RoutingTableEntry> removedPaths = new TreeSet<>();
+
+            for (RoutingTableEntry path : allPaths) {
+                if (isPeerInvolved.test(path)) {
+                    removedPaths.add(path);
+                }
+            }
+
+            allPaths.removeAll(removedPaths) ;
+            contentRoutingTable.put(fileHash, allPaths);
+
+            if (removedPaths.size() > 0) {
+                removedTable.put(fileHash, removedPaths);
+            }
+        }
+
+        if (removedTable.size() > 0) {
+            updateVersion();
+        }
+
+        return removedTable;
+    }
+
+    public void removeTotalPeerReference(String peerID) {
+        List<String> removedFileHashes = new ArrayList<>();
+
+        for (Map.Entry<String, Set<RoutingTableEntry>> entry : this.getContentRoutingTable().entrySet()) {
+
+            String fileHash = entry.getKey();
+            Set<RoutingTableEntry> paths = entry.getValue();
+            paths.removeIf(path -> path.envolvesPeer(peerID));
+
+            if (paths.size() > 0) {
+                this.put(fileHash, paths);
+            } else {
+                removedFileHashes.add(fileHash);
+            }
+        }
+
+        removedFileHashes.forEach(s -> this.getContentRoutingTable().remove(s));
+    }
+
+    public boolean removeEntries(RoutingTable removingPaths, String peerID) {
+        // Ignore updates I gave to other people (redundant not to)
+
+        if (removingPaths.ownerID.equals(this.ownerID)) {
+            return false;
+        }
+
+        boolean tableChanged = false;
+
+        for (Map.Entry<String, Set<RoutingTableEntry>> paths : removingPaths.entrySet()) {
+            String fileHash = paths.getKey();
+
+            boolean removedExistingContent = contentRoutingTable.get(fileHash).removeAll(paths.getValue());
+
+            tableChanged |= removedExistingContent;
+        }
+
+        if (tableChanged) {
+            updateVersion();
+        }
+
+        return tableChanged;
+    }
+
+    public void transformIntoMyPerspective(String peerID, String myID) {
+        // Transform all paths into what they should be in MY perspective
+        for (Map.Entry<String, Set<RoutingTableEntry>> entry : this.getContentRoutingTable().entrySet()) {
+            String fileHash = entry.getKey();
+            Set<RoutingTableEntry> paths = entry.getValue();
+            paths.forEach(path -> path.transformNeighbourEntryIntoMine(peerID, myID));
+            this.put(fileHash, paths);
+        }
     }
 
     public String toString() {
@@ -120,53 +314,14 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
         return sb.toString();
     }
 
-    public List<Map.Entry<String,RoutingTableEntry>> similarFileNameSearch(String queryString) {
-        String[] formatedSpaceSeparatedParams = queryString.split(" ");
-        for (int i = 0; i < formatedSpaceSeparatedParams.length; i++) {
-            formatedSpaceSeparatedParams[i] = formatedSpaceSeparatedParams[i].toLowerCase();
-        }
-
-        // For every file name, look how many matches of "spaceSeparatedParams" we get
-        Function<RoutingTableEntry, Function<String[], Integer>> wordsInCommon =
-                entry -> words -> {
-                    int count = 0;
-                    String fileName = entry.getFileName();
-                    for (int i = 0; i < words.length; i++) {
-                        if (fileName.toLowerCase().indexOf(words[i]) != -1) {
-                            count++;
-                        }
-                    }
-                    return count;
-                };
-
-        return contentRoutingTable.entrySet()
-                .stream()
-                .filter(entry -> wordsInCommon.apply(entry.getValue()).apply(formatedSpaceSeparatedParams) > 0) // Null matches get removed
-                .sorted(Comparator.comparingInt(entry -> wordsInCommon.apply(entry.getValue()).apply(formatedSpaceSeparatedParams))) // Prioritize bigger matches, like on a search engine
-                .collect(Collectors.toList());
+    public void updateVersion() {
+        previousVersion = version;
+        version = getTimestampOfNow();
     }
 
-    public void removePeer(String peerID) {
-
-        // Removing any mention of this peer implies removing table entries where the peer is either destination or next hop
-        Predicate<RoutingTableEntry> isPeerInvolved = entry -> entry.getNextHopMAC().equals(peerID) || entry.getDstMAC().equals(peerID);
-
-        contentRoutingTable.entrySet().removeIf(entry -> isPeerInvolved.test(entry.getValue()));
-    }
-
-    public Integer getMostRecentHash() {
-        return routingTableHash;
-    }
-
-    public String getOwnerID() {
-        return ownerID;
-    }
-
-    public Map<String, RoutingTableEntry> getContentRoutingTable() {
-        return contentRoutingTable;
-    }
-
-    // MAP METHODS
+    /**
+     * =================== Map related interface implementations
+     */
 
     @Override
     public int size() {
@@ -189,22 +344,22 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
     }
 
     @Override
-    public RoutingTableEntry get(Object o) {
+    public Set<RoutingTableEntry> get(Object o) {
         return contentRoutingTable.get(o);
     }
 
     @Override
-    public RoutingTableEntry put(String s, RoutingTableEntry mobileRoutingTableEntry) {
-        return contentRoutingTable.put(s, mobileRoutingTableEntry);
+    public Set<RoutingTableEntry> put(String s, Set<RoutingTableEntry> routingTableEntries) {
+        return contentRoutingTable.put(s, routingTableEntries);
     }
 
     @Override
-    public RoutingTableEntry remove(Object o) {
+    public Set<RoutingTableEntry> remove(Object o) {
         return contentRoutingTable.remove(o);
     }
 
     @Override
-    public void putAll(Map<? extends String, ? extends RoutingTableEntry> map) {
+    public void putAll(Map<? extends String, ? extends Set<RoutingTableEntry>> map) {
         contentRoutingTable.putAll(map);
     }
 
@@ -219,13 +374,12 @@ public class RoutingTable implements Map<String, RoutingTableEntry>, Serializabl
     }
 
     @Override
-    public Collection<RoutingTableEntry> values() {
+    public Collection<Set<RoutingTableEntry>> values() {
         return contentRoutingTable.values();
     }
 
     @Override
-    public Set<Entry<String, RoutingTableEntry>> entrySet() {
+    public Set<Entry<String, Set<RoutingTableEntry>>> entrySet() {
         return contentRoutingTable.entrySet();
     }
-
 }
