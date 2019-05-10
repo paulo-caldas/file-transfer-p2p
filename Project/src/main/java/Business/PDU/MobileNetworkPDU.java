@@ -12,7 +12,11 @@ public abstract class MobileNetworkPDU implements Serializable {
      * Types of errors
      */
     public enum MobileNetworkErrorType {
-        VALID // Nothing bad happened
+        VALID, // Nothing bad happened
+        CONTENT_NOT_FOUND, // The requested content could not be found
+        UNROUTABLE, // Could not route packet
+        INSUFFICIENT_PARAMS,
+        NO_SUCH_CONTENT_TYPE
     }
 
     /**
@@ -31,7 +35,8 @@ public abstract class MobileNetworkPDU implements Serializable {
         ROUTING_TABLE_VERSION,
         ROUTING_TABLE_INSERTION_UPDATE,
         ROUTING_TABLE_DELETION_UPDATE,
-        FILE // Anything that can be converted to a byte array
+        FILE, // Anything that can be converted to a byte array
+        ERROR // Nothing goes in here because something went wrong along the way
     }
 
     public static final int STANDARD_TTL = 62;
