@@ -10,8 +10,11 @@ import static Business.PDU.MobileNetworkPDU.MobileNetworkMessageType.REQUEST_CON
  */
 public class DataRequestMobileNetworkPDU extends DataMobileNetworkPDU implements Serializable {
 
-    // No params given
     public DataRequestMobileNetworkPDU(String srcMAC, String dstMAC, MobileNetworkErrorType errorCode, int TTL, String sessionID, Stack<String> nodePath, ContentType requestedContentType, String[] optionalParams) {
         super(srcMAC, dstMAC, REQUEST_CONTENT, errorCode, TTL, sessionID, nodePath, requestedContentType, optionalParams);
+    }
+
+    public String getRequestedFileHash() {
+        return this.getParams()[0];
     }
 }

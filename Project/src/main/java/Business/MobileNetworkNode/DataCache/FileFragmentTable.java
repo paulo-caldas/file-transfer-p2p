@@ -35,9 +35,11 @@ public class FileFragmentTable<A> {
      * @param key Key that the file's fragments are to be mapped into
      * @param fragmentToAdd Fragment to include in the list of fragments regarding a file
      * @throws IOException When trying to write to file
-     * @return True if all the files were gathered into a single file, False if more are still missing
+     * @return 1 if all the files were gathered into a single file, False if more are still missing
+     *         0 if its a new chunk
+     *         -1 if its a repeated chunk
      */
-    public boolean putFragment(A key, FileFragment fragmentToAdd) throws IOException {
+    public int putFragment(A key, FileFragment fragmentToAdd) throws IOException {
         LinkedList<FileFragment> existingFragments;
 
         if (!fileFragmentsMap.containsKey(key)) {
@@ -53,7 +55,7 @@ public class FileFragmentTable<A> {
             while ((i < existingFragments.size()) && (existingFragments.get(i).getInitbyte() - initByteOfFragment <= 0)) {
                 if (existingFragments.get(i).getInitbyte() == initByteOfFragment) {
                     // We already have this chunk
-                    return false;
+                    return -1;
                 }
                 i++;
             }
@@ -72,10 +74,11 @@ public class FileFragmentTable<A> {
             // Since the job is done, remove the chunks from memory
             fileFragmentsMap.remove(key);
 
-            return true;
+            return 1;
+        } else {
+            return 0;
         }
 
-        return false;
     }
 
     public FileFragment getFragment(A key, int requestedInitByte) {
@@ -100,6 +103,30 @@ public class FileFragmentTable<A> {
 
         // Didnt find it...
         throw null;
+    }
+
+    public boolean hasFragment(A key, int requestedInitByte) {
+        LinkedList<FileFragment> fragments = fileFragmentsMap.get(key);
+
+        if (fragments == null) {
+            return false;
+        }
+
+        for (FileFragment fragment : fragments) {
+            int byteFragmentStartsAt = fragment.getInitbyte();
+            if (byteFragmentStartsAt == requestedInitByte) {
+                return true;
+
+                // We can do this only because the linked list is ordered by initial byte of fragment!!
+            } else if (byteFragmentStartsAt > requestedInitByte) {
+                // We know we won't find it in the rest of the list
+                return false;
+            }
+
+        }
+
+        // Didnt find it...
+        return false;
     }
 
     private boolean isFragmentsCompleteFile(LinkedList<FileFragment> fileFragments) {
@@ -136,6 +163,24 @@ public class FileFragmentTable<A> {
         }
 
         return isFileComplete;
+    }
+
+    public int getNextNonExistingInitByte(A key) {
+        LinkedList<FileFragment> sortedFragments = fileFragmentsMap.get(key);
+
+        if (sortedFragments == null) {
+            // We have not a single fragment, aka you should ask for byte 0 next
+
+            return 0;
+        }
+
+        // the fragments are ordered by initByte order, thus the next one follows the last fragment
+        FileFragment lastFragment = sortedFragments.getLast();
+
+        int initByteLastChunk = lastFragment.getInitbyte();
+        int lengthOfLastChunk = lastFragment.getChunk().length;
+
+        return initByteLastChunk + lengthOfLastChunk;
     }
 
     private void turnChunksToFile(A key) throws IOException {

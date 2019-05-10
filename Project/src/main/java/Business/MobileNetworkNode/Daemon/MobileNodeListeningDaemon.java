@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.*;
 
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
+import static Business.PDU.MobileNetworkPDU.ContentType.FILE;
 import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.CONTENT_NOT_FOUND;
 import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.INSUFFICIENT_PARAMS;
 import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.NO_SUCH_CONTENT_TYPE;
@@ -102,18 +103,27 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
     private void parseRequestContentPacket(DataRequestMobileNetworkPDU pdu) {
         String messageDestination = pdu.getDstMAC();
 
-        boolean amIDestination = messageDestination.equals(super.getNodeMacAdress())
-                || messageDestination.equals(LINK_BROADCAST.toString());
+        boolean amIRoutingDestination =
+                (messageDestination.equals(super.getNodeMacAdress())
+                || messageDestination.equals(LINK_BROADCAST.toString()));
 
-        if (amIDestination) {
+        boolean isFileRequest = pdu.getContentType().equals(FILE);
+
+        boolean canGiveFileInBehalfOfDestination = false;
+
+        Stack<String> nodePath = pdu.getNodePath();
+
+        boolean amIIntermediate = isIntermediate(nodePath);
+
+        if (isFileRequest) {
+            String[] params = pdu.getParams();
+            canGiveFileInBehalfOfDestination = super.hasFragmentStored(params);
+        }
+
+        if ((amIRoutingDestination && amIIntermediate) || canGiveFileInBehalfOfDestination) {
             // I am the final destination of this request
             respondToDataRequest(pdu);
         } else {
-            Stack<String> nodePath = pdu.getNodePath();
-            String nextHop = nodePath.peek();
-
-            boolean amIIntermediate = (nextHop != null) && nextHop.equals(super.getNodeMacAdress());
-
             if (amIIntermediate) {
                 // The destination is somebody else, I am simply an intermediate
                 super.forwardRequestPacket(pdu);
@@ -133,9 +143,8 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
         } else {
             // Check if I am the next hop to the message
             Stack<String> nodePath = responsePDU.getNodePath();
-            String nextHop = nodePath.peek();
 
-            boolean amIIntermediate = (nextHop != null) && nextHop.equals(super.getNodeMacAdress());
+            boolean amIIntermediate = isIntermediate(nodePath);
 
             if (amIIntermediate) {
                 // I am an intermediate hop to the final destination
@@ -198,6 +207,7 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
             super.sendErrorMessage(requestPDU, INSUFFICIENT_PARAMS);
             return;
         }
+
 
         String fileHashRequested = params[0];
 
@@ -393,15 +403,33 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
         String fileHash = responsePDU.getParams()[0];
 
         try {
-            boolean isDownloadComplete = super.addFragmentToCache(fileHash, fileFragment);
 
-            if (isDownloadComplete) {
-                System.out.println("Download of " + fileFragment.getFileName() + " complete.");
+            int res = super.addFragmentToCache(fileHash, fileFragment);
+
+            if (res == 1) {
+                System.out.println("Requested file received fully");
+            } else if (res == 0) {
+                String msg = String.format("(init=%d,len=%d) received (total_needed=%d)", fileFragment.getInitbyte(), fileFragment.getChunk().length, fileFragment.getTotalSizeBytes());
+                System.out.println(msg);
+
+                // We got a fragment... What fragment do we need next?
+                int nextByteToAskFor = super.getNextNeededInitByteToRequest(fileHash);
+
+                super.requestContentFromSingleNode(fileHash, nextByteToAskFor);
             }
+
 
         } catch (IOException e) {
             LOGGER.error("Couldn't write byte array into file");
         }
+    }
+
+    private boolean isIntermediate(Stack<String> nodePath) {
+        String nextHop = nodePath.peek();
+
+        return (nextHop != null
+        && (nextHop.equals(super.getNodeMacAdress()) || nextHop.equals(LINK_BROADCAST.toString())));
+
     }
 
     private boolean isDirectUpdate(String peerID, RoutingTable pathsToRemove) {

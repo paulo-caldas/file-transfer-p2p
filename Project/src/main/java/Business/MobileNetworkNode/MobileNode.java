@@ -66,7 +66,7 @@ public class MobileNode {
     private Integer port;
 
     // If dividing a file into UDP-sendable chunks, this is the size of each chunk
-    private final int FILE_CHUNK_SIZE_BYTES = 3000;
+    private final int FILE_CHUNK_SIZE_BYTES = 1000;
 
     // Logger to log information into a file
     private final Logger LOGGER = Logger.getLogger(MobileNode.class);
@@ -287,7 +287,8 @@ public class MobileNode {
                 String requestedFileName = matchingEntriesInList.get(optionInt).getFileName();
                 String requestedFileHash = fileHashMap.get(requestedFileName);
 
-                requestContentFromSingleNode(requestedFileHash);
+                // Asking for the first time, request byte 0
+                requestContentFromSingleNode(requestedFileHash, 0);
 
                 fileItemChosen = true;
             }
@@ -295,7 +296,7 @@ public class MobileNode {
         } while(!option.equals("E") && !fileItemChosen);
     }
 
-    private void requestContentFromSingleNode(String requestedFileHash) {
+    public void requestContentFromSingleNode(String requestedFileHash, int initByteToAsk) {
         RoutingTableEntry path;
 
         synchronized(contentRoutingTable) {
@@ -315,8 +316,8 @@ public class MobileNode {
 
         String destination = path.getDstMAC();
         String nextHop = path.getNextHopMAC();
-        int hopCount = path.getHopCount();
-        sendRequestContentMessage(destination,nextHop,hopCount, getTimestampOfNow(), requestedFileHash);
+
+        sendRequestContentMessage(destination, nextHop, getTimestampOfNow(), requestedFileHash, initByteToAsk);
     }
 
     public MobileNetworkPDU capturePDU() throws IOException, ClassNotFoundException {
@@ -470,13 +471,14 @@ public class MobileNode {
         sendPDU(removeUpdatePacket);
     }
 
-    public void sendRequestContentMessage(String dstMac, String nextHopMAC, int maxHopCount, String timestamp, String fileHash) {
+    public void sendRequestContentMessage(String dstMac, String nextHopMAC, String timestamp, String fileHash, int initByte) {
         Stack<String> nodePath = new Stack<>();
         nodePath.push(macAddr);
         nodePath.push(nextHopMAC);
 
-        String[] params = new String[1];
+        String[] params = new String[2];
         params[0] = fileHash;
+        params[1] = String.valueOf(initByte);
 
         MobileNetworkPDU requestContentPacket = new DataRequestMobileNetworkPDU(
                 macAddr,

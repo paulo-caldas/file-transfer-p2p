@@ -149,8 +149,12 @@ public abstract class MobileNodeDaemon implements Runnable {
         representativeNode.sendResponseFileMessage(requestItRespondsTo, fragment, params);
     }
 
-    public void sendErrorMessage(DataRequestMobileNetworkPDU requestPDU, MobileNetworkPDU.MobileNetworkErrorType errorToSend) {
+    void sendErrorMessage(DataRequestMobileNetworkPDU requestPDU, MobileNetworkPDU.MobileNetworkErrorType errorToSend) {
         representativeNode.sendErrorMessage(requestPDU, errorToSend);
+    }
+
+    void requestContentFromSingleNode(String requestedFileHash, int initByteToAsk) {
+        representativeNode.requestContentFromSingleNode(requestedFileHash, initByteToAsk);
     }
 
     void forwardResponsePacket(DataResponseMobileNetworkPDU responsePDU) {
@@ -255,7 +259,7 @@ public abstract class MobileNodeDaemon implements Runnable {
      * =================== Functionalities: Operating on the local storage of file fragments
      */
 
-    boolean addFragmentToCache(String key, FileFragment fragmentToAdd) throws IOException {
+    int addFragmentToCache(String key, FileFragment fragmentToAdd) throws IOException {
         synchronized (cacheOfFragmentedFiles) {
             return cacheOfFragmentedFiles.putFragment(key, fragmentToAdd);
         }
@@ -264,6 +268,26 @@ public abstract class MobileNodeDaemon implements Runnable {
     FileFragment getFragment(String key, int requestedInitByte) {
         synchronized (cacheOfFragmentedFiles) {
             return cacheOfFragmentedFiles.getFragment(key, requestedInitByte);
+        }
+    }
+
+    boolean hasFragmentStored(String[] params) {
+        synchronized (cacheOfFragmentedFiles) {
+            if (params.length == 0) {
+                return false;
+            }
+
+            String fileHash = params[0];
+
+            int initByteRequested = params.length == 2 ? Integer.parseInt(params[1]) : 0;
+
+            return cacheOfFragmentedFiles.hasFragment(fileHash, initByteRequested);
+        }
+    }
+
+    int getNextNeededInitByteToRequest(String key) {
+        synchronized (cacheOfFragmentedFiles) {
+            return cacheOfFragmentedFiles.getNextNonExistingInitByte(key);
         }
     }
 }
