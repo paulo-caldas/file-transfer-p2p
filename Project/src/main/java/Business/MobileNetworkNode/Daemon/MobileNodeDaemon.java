@@ -149,6 +149,10 @@ public abstract class MobileNodeDaemon implements Runnable {
         representativeNode.sendResponseFileMessage(requestItRespondsTo, fragment, params);
     }
 
+    public void sendErrorMessage(DataRequestMobileNetworkPDU requestPDU, MobileNetworkPDU.MobileNetworkErrorType errorToSend) {
+        representativeNode.sendErrorMessage(requestPDU, errorToSend);
+    }
+
     void forwardResponsePacket(DataResponseMobileNetworkPDU responsePDU) {
         representativeNode.forwardResponseContentPacket(responsePDU);
     }

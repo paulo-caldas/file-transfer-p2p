@@ -152,7 +152,7 @@ public class RoutingTable implements Map<String, Set<RoutingTableEntry>>, Serial
                 .orElseThrow(NullPointerException::new);
     }
 
-    public String getNextPeerHop(String destination) throws NullPointerException {
+    public String getNextPeerHop(String destination) {
         for (Set<RoutingTableEntry> entries : contentRoutingTable.values()) {
             for (RoutingTableEntry entry : entries) {
                 if (entry.getDstMAC().equals(destination)) {
@@ -160,7 +160,8 @@ public class RoutingTable implements Map<String, Set<RoutingTableEntry>>, Serial
                 }
             }
         }
-        throw new NullPointerException();
+
+        return null;
     }
 
     /**

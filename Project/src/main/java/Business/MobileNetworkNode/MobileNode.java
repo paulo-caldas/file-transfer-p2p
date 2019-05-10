@@ -22,6 +22,7 @@ import org.apache.log4j.xml.DOMConfigurator;
 
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
 import static Business.PDU.MobileNetworkPDU.ContentType.*;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.UNROUTABLE;
 import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.VALID;
 import static Business.PDU.MobileNetworkPDU.STANDARD_TTL;
 import static Business.Utils.getTimestampOfNow;
@@ -351,6 +352,36 @@ public class MobileNode {
         sendPDU(helloPacket);
     }
 
+    public void sendErrorMessage(DataRequestMobileNetworkPDU requestPDU, MobileNetworkPDU.MobileNetworkErrorType errorToSend) {
+        // The error is to be send to the one who requested
+        String messageDestination = requestPDU.getSrcMAC();
+
+        // sessionID stays the same to we know what the error refers to
+        String sessionID = requestPDU.getSessionID();
+
+        // So say were node C and we receive
+        // B -> [A,B,(C)] ---> C
+        // B -> [A,(B)]   <--- C
+        Stack<String> nodePath = requestPDU.getNodePath();
+
+        nodePath.pop();
+
+        MobileNetworkPDU errorPacket = new DataResponseMobileNetworkPDU(
+                macAddr,
+                messageDestination,
+                errorToSend,
+                STANDARD_TTL,
+                sessionID,
+                nodePath,
+                ERROR,
+                new String[0], // No params user in error messages
+                null); // Error messages return nothing
+
+        LOGGER.error("SENDING(ERROR): " + errorPacket.toString());
+
+        sendPDU(errorPacket);
+    }
+
     public void sendPingMessage(String dstMac, String timestamp) {
         // pongs only happen on a single-hop basis
         Stack<String> nodePath = new Stack<>();
@@ -521,12 +552,12 @@ public class MobileNode {
     public void forwardRequestContentPacket(DataRequestMobileNetworkPDU requestPDU) {
         String messageDestination = requestPDU.getDstMAC();
 
-        try {
-            String nextHop;
-            synchronized (contentRoutingTable) {
-                nextHop = contentRoutingTable.getNextPeerHop(messageDestination);
-            }
+        String nextHop;
+        synchronized (contentRoutingTable) {
+            nextHop = contentRoutingTable.getNextPeerHop(messageDestination);
+        }
 
+        if (nextHop != null) {
             Stack<String> nodePath = requestPDU.getNodePath();
 
             // Look to the first empty value in array and push the new next hop
@@ -536,8 +567,8 @@ public class MobileNode {
             LOGGER.info("Forwarding (to " + nextHop + "):" + requestPDU.toString());
 
             this.sendPDU(requestPDU);
-        } catch (NullPointerException e) {
-            // TODO: Send error message "cant route"
+        } else {
+            sendErrorMessage(requestPDU, UNROUTABLE);
         }
     }
 

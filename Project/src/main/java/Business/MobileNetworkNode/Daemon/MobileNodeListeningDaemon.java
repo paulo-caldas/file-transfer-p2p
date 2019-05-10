@@ -15,6 +15,9 @@ import java.io.IOException;
 import java.util.*;
 
 import static Business.MobileNetworkNode.MobileNode.AddressType.LINK_BROADCAST;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.CONTENT_NOT_FOUND;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.INSUFFICIENT_PARAMS;
+import static Business.PDU.MobileNetworkPDU.MobileNetworkErrorType.NO_SUCH_CONTENT_TYPE;
 import static Business.Utils.*;
 
 /**
@@ -145,22 +148,22 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
      *  ======================== Responding to request messages
      */
 
-    private void respondToDataRequest(DataRequestMobileNetworkPDU pdu) {
-        ContentType contentType = pdu.getContentType();
+    private void respondToDataRequest(DataRequestMobileNetworkPDU requestPDU) {
+        ContentType contentType = requestPDU.getContentType();
 
         switch (contentType) {
             case ROUTING_TABLE_VERSION:
                 // Requesting for the version of a node is essentially a ping
-                respondToPing(pdu);
+                respondToPing(requestPDU);
                 break;
             case ROUTING_TABLE:
-                respondToRoutingTableRequest(pdu);
+                respondToRoutingTableRequest(requestPDU);
                 break;
             case FILE:
-                respondToFileRequest(pdu);
+                respondToFileRequest(requestPDU);
                 break;
             default:
-                // TODO: send error of unknown type
+                super.sendErrorMessage(requestPDU, NO_SUCH_CONTENT_TYPE);
                 break;
         }
     }
@@ -192,8 +195,7 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
         String[] params = requestPDU.getParams();
 
         if (params.length == 0) {
-            // TODO: Send error: insufficient params
-
+            super.sendErrorMessage(requestPDU, INSUFFICIENT_PARAMS);
             return;
         }
 
@@ -202,12 +204,12 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
         // If the user doesn't explicitly use the second param to ask for a specific byte, we assume he asks for the first one (index 0)
         int initByteRequested = params.length == 2 ? Integer.parseInt(params[1]) : 0;
 
-        try {
-            FileFragment requestedFragment = super.getFragment(fileHashRequested, initByteRequested);
+        FileFragment requestedFragment = super.getFragment(fileHashRequested, initByteRequested);
 
+        if (requestedFragment != null) {
             super.sendResponseFileMessage(requestPDU, requestedFragment, params);
-        } catch (NullPointerException e) {
-            // TODO: Send error: Non-existent content
+        } else {
+            super.sendErrorMessage(requestPDU, CONTENT_NOT_FOUND);
         }
     }
 
@@ -282,8 +284,10 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
             case ROUTING_TABLE_INSERTION_UPDATE:
                 processInsertionUpdate(responsePDU);
                 break;
+            case ERROR:
+                // TODO: THIS
+                break;
             default:
-                // TODO: send error of unknown type
                 break;
         }
     }
@@ -388,9 +392,13 @@ public class MobileNodeListeningDaemon extends MobileNodeDaemon {
 
         String fileHash = responsePDU.getParams()[0];
 
-        // TODO : use boolean variable to know when to tell user download is complete
         try {
             boolean isDownloadComplete = super.addFragmentToCache(fileHash, fileFragment);
+
+            if (isDownloadComplete) {
+                System.out.println("Download of " + fileFragment.getFileName() + " complete.");
+            }
+
         } catch (IOException e) {
             LOGGER.error("Couldn't write byte array into file");
         }
